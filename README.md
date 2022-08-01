@@ -1,3 +1,8 @@
+Quite a bit of Havok-related code comes from [PLANCK](https://github.com/adamhynek/activeragdoll) and [HIGGS](https://github.com/adamhynek/higgs)
+
+The debug drawing functionality is hastily put together from [SmoothCam](https://github.com/mwilsnd/SkyrimSE-SmoothCam)'s code that draws the arrow trajectory. I know it's horribly hacked together but it's just a debug feature, I didn't have time or a real reason to refactor it yet.
+ 
+
 ## Requirements
 * [CMake](https://cmake.org/)
 	* Add this to your `PATH`
