@@ -29,9 +29,11 @@ struct AttackCollision
 	bool HasHitRef(RE::ObjectRefHandle a_handle) const;
 	void AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearHitRefs();
+	void IncreaseDamagedCount();
 
 	uint32_t GetHitCount() const;
 	uint32_t GetHitNPCCount() const;
+	uint32_t GetDamagedCount() const;
 
 	bool Update(float a_deltaTime);
 	uint32_t lastUpdate = 0;
@@ -58,8 +60,10 @@ struct AttackCollisions
 	bool HasIDHitRef(uint8_t a_ID, RE::ObjectRefHandle a_handle) const;
 	void AddIDHitRef(uint8_t a_ID, RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearIDHitRefs(uint8_t a_ID);
+	void IncreaseIDDamagedCount(uint8_t a_ID);
 	uint32_t GetIDHitCount(uint8_t a_ID) const;
 	uint32_t GetIDHitNPCCount(uint8_t a_ID) const;
+	uint32_t GetIDDamagedCount(uint8_t a_ID) const;
 
 	std::optional<uint32_t> ignoreVanillaAttackEvents;
 	bool bStartedWithWeaponSwing = false;

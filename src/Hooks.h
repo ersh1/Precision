@@ -64,7 +64,7 @@ namespace Hooks
 			_HitData_GetWeaponDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x1A5, 0x1A4), HitData_GetWeaponDamage);    // 7429F5, 76EF54
 			_HitData_GetBashDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x22F, 0x226), HitData_GetBashDamage);        // 742A7F, 76EFD6
 			_HitData_GetUnarmedDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x26A, 0x24D), HitData_GetUnarmedDamage);  // 742ABA, 76EFFD
-																																				//_HitData_GetStagger = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x2FC, 0x2D7), HitData_GetStagger);              // 742B4C, 76F087
+			//_HitData_GetStagger = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x2FC, 0x2D7), HitData_GetStagger);              // 742B4C, 76F087
 		}
 
 	private:
@@ -83,7 +83,6 @@ namespace Hooks
 		static void HitData_GetUnarmedDamage(RE::ActorValueOwner* a_actorValueOwner, float& a_outDamage);
 		static float HitData_GetStagger(RE::Actor* a_source, RE::Actor* a_target, RE::TESObjectWEAP* a_weapon, float a4);
 
-		static bool ActorHasAttackCollision(const RE::ActorHandle a_actorHandle);
 		static RE::NiPointer<RE::BGSAttackData>& FixAttackData(RE::NiPointer<RE::BGSAttackData>& a_attackData, RE::TESRace* a_race);
 
 		static inline REL::Relocation<decltype(Func1)> _Func1;
@@ -100,6 +99,38 @@ namespace Hooks
 		static inline REL::Relocation<decltype(HitData_GetBashDamage)> _HitData_GetBashDamage;
 		static inline REL::Relocation<decltype(HitData_GetUnarmedDamage)> _HitData_GetUnarmedDamage;
 		static inline REL::Relocation<decltype(HitData_GetStagger)> _HitData_GetStagger;
+	};
+
+	class AttackReachHooks
+	{
+	public:
+		static void Hook()
+		{
+			// Actor::GetReach calls
+			REL::Relocation<uintptr_t> hook1{ RELOCATION_ID(37655, 38608) };  // 627E10, 64D900
+			REL::Relocation<uintptr_t> hook2{ RELOCATION_ID(37689, 38603) };  // 62B870, 64D350
+			REL::Relocation<uintptr_t> hook3{ RELOCATION_ID(41271, 42350) };  // 705530, 72F330,  PlayerControls::SendAction
+
+			auto& trampoline = SKSE::GetTrampoline();
+			/*_GetReach1 = trampoline.write_call<5>(hook1.address() + RELOCATION_OFFSET(0x86, 0x86), GetReach1);
+			_GetReach2 = trampoline.write_call<5>(hook2.address() + RELOCATION_OFFSET(0x8F, 0x3C0), GetReach2);
+			_GetReach3 = trampoline.write_call<5>(hook3.address() + RELOCATION_OFFSET(0x7C, 0xAA), GetReach3);*/
+
+			// other calls
+			REL::Relocation<uintptr_t> hook4{ RELOCATION_ID(46068, 47332) };  // 7BEB90, 7E9890
+			_GetWeaponReach1 = trampoline.write_call<5>(hook4.address() + RELOCATION_OFFSET(0x9B, 0xA0), GetWeaponReach1);
+		}
+
+	private:
+		static float GetReach1(RE::Actor* a_actor);
+		static float GetReach2(RE::Actor* a_actor);
+		static float GetReach3(RE::Actor* a_actor);
+		static float GetWeaponReach1(RE::Actor* a_actor, RE::TESObjectWEAP* a_weapon);
+
+		static inline REL::Relocation<decltype(GetReach1)> _GetReach1;
+		static inline REL::Relocation<decltype(GetReach2)> _GetReach2;
+		static inline REL::Relocation<decltype(GetReach3)> _GetReach3;
+		static inline REL::Relocation<decltype(GetWeaponReach1)> _GetWeaponReach1;
 	};
 
 	class FirstPersonStateHook
@@ -262,6 +293,8 @@ namespace Hooks
 		static inline REL::Relocation<decltype(bhkCollisionFilter_CompareFilterInfo6)> _bhkCollisionFilter_CompareFilterInfo6;
 		static inline REL::Relocation<decltype(bhkCollisionFilter_CompareFilterInfo7)> _bhkCollisionFilter_CompareFilterInfo7;
 	};
+
+	bool ActorHasAttackCollision(const RE::ActorHandle a_actorHandle);
 
 	void Install();
 }

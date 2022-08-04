@@ -244,6 +244,10 @@ void Settings::ReadSettings()
 		ReadFloatSetting(mcm, "AttackCollisions", "fThirdPersonPlayerCapsuleRadiusMult", fThirdPersonPlayerCapsuleRadiusMult);
 		ReadFloatSetting(mcm, "AttackCollisions", "fMountedWeaponReachMult", fMountedWeaponReachMult);
 		ReadFloatSetting(mcm, "AttackCollisions", "fMountedCapsuleRadiusMult", fMountedCapsuleRadiusMult);
+		ReadUInt32Setting(mcm, "AttackCollisions", "uSweepAttackMode", (uint32_t&)uSweepAttackMode);
+		ReadUInt32Setting(mcm, "AttackCollisions", "uMaxTargetsNoSweepAttack", uMaxTargetsNoSweepAttack);
+		ReadUInt32Setting(mcm, "AttackCollisions", "uMaxTargetsSweepAttack", uMaxTargetsSweepAttack);
+		ReadFloatSetting(mcm, "AttackCollisions", "fSweepAttackDiminishingReturnsFactor", fSweepAttackDiminishingReturnsFactor);
 
 		// Trails
 		ReadBoolSetting(mcm, "Trails", "bDisplayTrails", bDisplayTrails);
@@ -291,6 +295,7 @@ void Settings::ReadSettings()
 		ReadBoolSetting(mcm, "HitImpulse", "bApplyImpulseOnHit", bApplyImpulseOnHit);
 		ReadBoolSetting(mcm, "HitImpulse", "bApplyImpulseOnKill", bApplyImpulseOnKill);
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseBaseMult", fHitImpulseBaseMult);
+		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseBlockMult", fHitImpulseBlockMult);
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulsePowerAttackMult", fHitImpulsePowerAttackMult);
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseRagdollMult", fHitImpulseRagdollMult);
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseKillMult", fHitImpulseKillMult);

@@ -66,6 +66,9 @@ public:
 	[[nodiscard]] bool HasStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle) const;
 	[[nodiscard]] bool HasStartedPrecisionCollision(RE::ActorHandle a_actorHandle, uint32_t a_activeGraphIdx) const;
 
+	void SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle);
+	void SetStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle);
+
 	[[nodiscard]] bool HasHitRef(RE::ActorHandle a_actorHandle, RE::ObjectRefHandle a_handle) const;
 	void AddHitRef(RE::ActorHandle a_actorHandle, RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearHitRefs(RE::ActorHandle a_actorHandle);
@@ -75,8 +78,10 @@ public:
 	[[nodiscard]] bool HasIDHitRef(RE::ActorHandle a_actorHandle, uint8_t a_ID, RE::ObjectRefHandle a_handle) const;
 	void AddIDHitRef(RE::ActorHandle a_actorHandle, uint8_t a_ID, RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearIDHitRefs(RE::ActorHandle a_actorHandle, uint8_t a_ID);
+	void IncreaseIDDamagedCount(RE::ActorHandle a_actorHandle, uint8_t a_ID);
 	[[nodiscard]] uint32_t GetIDHitCount(RE::ActorHandle a_actorHandle, uint8_t a_ID) const;
 	[[nodiscard]] uint32_t GetIDHitNPCCount(RE::ActorHandle a_actorHandle, uint8_t a_ID) const;
+	[[nodiscard]] uint32_t GetIDDamagedCount(RE::ActorHandle a_actorHandle, uint8_t a_ID) const;
 
 	void Initialize();
 	void Clear();
@@ -92,7 +97,7 @@ public:
 
 	void ProcessPrePhysicsStepJobs();
 
-	bool GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, bool bIsLeftSwing = false) const;
+	bool GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> bIsLeftSwing = std::nullopt) const;
 
 	bool ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_event, CollisionEventType a_eventType, CollisionDefinition& a_outCollisionDefinition) const;
 

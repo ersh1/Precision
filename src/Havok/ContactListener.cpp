@@ -135,10 +135,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 						}
 
 						if (bDoRecoil) {
-							if (!Settings::bRecoilPowerAttack) {  // skip recoil if the attack is a power attack
-								auto& attackData = attackerActor->currentProcess->high->attackData;
-								if (attackData &&
-									attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {
+							auto& attackData = attackerActor->currentProcess->high->attackData;
+							if (attackData) {
+								if (!Settings::bRecoilPowerAttack && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {  // skip recoil if the attack is a power attack
+									bDoRecoil = false;
+								}
+								if (attackData->data.flags.any(RE::AttackData::AttackFlag::kChargeAttack)) {  // skip recoil if the attack is a left attack (TEMP)
 									bDoRecoil = false;
 								}
 							}
@@ -211,6 +213,47 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 	}
 
+	// while in combat, filter out actors like teammates etc.
+	if (targetActor && attackerActor && attackerActor->IsInCombat()) {
+		// don't let player hit their teammates or summons
+		bool bAttackerIsPlayer = attackerActor->IsPlayerRef();
+		bool bTargetIsPlayer = targetActor->IsPlayerRef();
+		bool bAttackerIsTeammate = false;
+		bool bTargetIsTeammate = false;
+		if (!bAttackerIsPlayer) {
+			bAttackerIsTeammate = Utils::IsPlayerTeammateOrSummon(attackerActor);
+		}
+		if (!bTargetIsPlayer) {
+			bTargetIsTeammate = Utils::IsPlayerTeammateOrSummon(targetActor);
+		}
+		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsPlayer && bTargetIsTeammate) {
+			if (targetActor->currentCombatTarget != attackerActor->GetHandle()) {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				return;
+			}
+		}
+		// don't let the player's teammates or summons hit the player
+		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
+			if (attackerActor->currentCombatTarget != targetActor->GetHandle()) {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				return;
+			}
+		}
+		// don't let the player's teammates hit each other
+		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsTeammate) {
+			if (attackerActor->currentCombatTarget != targetActor->GetHandle()) {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				return;
+			}
+		}
+
+		// don't hit actors that aren't hostile and are in combat already
+		if (Settings::bNoNonHostileAttackCollision && targetActor->IsInCombat() && !targetActor->IsHostileToActor(attackerActor)) {
+			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			return;
+		}
+	}
+
 	RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
 
 	if (pointVelocity.IsEqual(RE::hkVector4())) {  // point velocity is zero
@@ -233,7 +276,6 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 						if (Settings::bDebug && Settings::bDisplayIframeHits) {
 							constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
-
 							DrawHandler::AddPoint(niHitPos, 1.f, blue);
 						}
 
@@ -247,38 +289,16 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	// disable physical collision with actor
 	if (targetActor || Settings::bDisablePhysicalCollisionOnHit) {
 		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
-	}
+	}	
 
 	// add to already hit refs so we don't hit the target again within the same attack
 	attackCollision->AddHitRef(target ? target->GetHandle() : RE::ObjectRefHandle(), targetActor ? FLT_MAX : Settings::fHitSameRefCooldown, targetActor ? true : false);
 
-	// while in combat, filter out actors like teammates etc.
-	if (targetActor && attackerActor && attackerActor->IsInCombat()) {
-		// don't let player hit their teammates or summons
-		bool bAttackerIsPlayer = attackerActor->IsPlayerRef();
-		bool bTargetIsPlayer = targetActor->IsPlayerRef();
-		bool bAttackerIsTeammate = false;
-		bool bTargetIsTeammate = false;
-		if (!bAttackerIsPlayer) {
-			bAttackerIsTeammate = Utils::IsPlayerTeammateOrSummon(attackerActor);
-		}
-		if (!bTargetIsPlayer) {
-			bTargetIsTeammate = Utils::IsPlayerTeammateOrSummon(targetActor);
-		}
-		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsPlayer && bTargetIsTeammate) {
-			return;
-		}
-		// don't let the player's teammates or summons hit the player
-		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
-			return;
-		}
-		// don't let the player's teammates hit each other
-		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsTeammate) {
-			return;
-		}
-
-		// don't hit actors that aren't hostile and are in combat already
-		if (Settings::bNoNonHostileAttackCollision && targetActor->IsInCombat() && !targetActor->IsHostileToActor(attackerActor)) {
+	// sweep attack check
+	if (Settings::uSweepAttackMode == SweepAttackMode::kMaxTargets) {
+		bool bHasSweepPerk = Utils::IsSweepAttackActive(attackerActor->GetHandle());
+		uint32_t maxTargets = bHasSweepPerk ? Settings::uMaxTargetsSweepAttack : Settings::uMaxTargetsNoSweepAttack;
+		if (maxTargets > 0 && attackCollision->GetHitNPCCount() > maxTargets) {
 			return;
 		}
 	}

@@ -147,8 +147,9 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 
 	RE::NiPoint3 tipOffset;
 
+	bool bIsShieldBashing = false;
+	
 	if (bIsWeapon) {
-		bool bIsShieldBashing = false;
 		bool bIsBashing = actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
 		if (!bIsBashing) {
 			if (auto& attackData = Actor_GetAttackData(actor)) {
@@ -157,8 +158,10 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		}
 
 		if (bIsBashing) {
+			auto rightHandEquipment = actor->currentProcess->GetEquippedRightHand();
 			auto leftHandEquipment = actor->currentProcess->GetEquippedLeftHand();
-			if (leftHandEquipment) {  // has something in the left hand so use the left hand node
+			
+			if (leftHandEquipment && leftHandEquipment != rightHandEquipment) {  // has something else in the left hand so use the left hand node
 				bIsShieldBashing = leftHandEquipment->IsArmor();
 
 				nodeName = "SHIELD"sv;
@@ -209,6 +212,8 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 
 		radius = Settings::fWeaponCapsuleRadius * havokWorldScale;
 
+
+
 		if (bIsPlayer) {
 			length *= bIsFirstPerson ? Settings::fFirstPersonPlayerWeaponReachMult : Settings::fThirdPersonPlayerWeaponReachMult;
 			radius *= bIsFirstPerson ? Settings::fFirstPersonPlayerCapsuleRadiusMult : Settings::fThirdPersonPlayerCapsuleRadiusMult;
@@ -223,6 +228,9 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		radius *= actorScale;*/
 
 		if (bIsShieldBashing) {
+			if ( bIsFirstPerson) {  // workaround for unfortunate shield bash FPP animation not really hitting stuff in front of you
+				length *= 2.f;
+			}
 			float halfLength = length * 0.5f;
 			vertexA.quad.m128_f32[0] = -halfLength;
 			vertexB.quad.m128_f32[0] = halfLength;
@@ -342,6 +350,12 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 
 	if (a_collisionDefinition.transform) {
 		newNode->local = *a_collisionDefinition.transform;
+
+		if (bIsShieldBashing) {  // swap the axis when shield bashing
+			RE::NiPoint3 vec = newNode->local.translate;
+			newNode->local.translate.z = vec.x;
+			newNode->local.translate.x = vec.z;
+		}
 	}
 
 	if (a_collisionDefinition.bWeaponTip) {
@@ -458,6 +472,15 @@ void AttackCollision::ClearHitRefs()
 	}
 }
 
+void AttackCollision::IncreaseDamagedCount()
+{
+	if (!ID) {
+		_hitRefs.IncreaseDamagedCount();
+	} else {
+		PrecisionHandler::GetSingleton()->IncreaseIDDamagedCount(actorHandle, *ID);
+	}
+}
+
 uint32_t AttackCollision::GetHitCount() const
 {
 	if (!ID) {
@@ -473,6 +496,15 @@ uint32_t AttackCollision::GetHitNPCCount() const
 		return _hitRefs.GetHitNPCCount();
 	} else {
 		return PrecisionHandler::GetSingleton()->GetIDHitNPCCount(actorHandle, *ID);
+	}
+}
+
+uint32_t AttackCollision::GetDamagedCount() const
+{
+	if (!ID) {
+		return _hitRefs.GetDamagedCount();
+	} else {
+		return PrecisionHandler::GetSingleton()->GetIDDamagedCount(actorHandle, *ID);
 	}
 }
 
@@ -614,6 +646,14 @@ void AttackCollisions::ClearIDHitRefs(uint8_t a_ID)
 	}
 }
 
+void AttackCollisions::IncreaseIDDamagedCount(uint8_t a_ID)
+{
+	auto search = _IDHitRefs.find(a_ID);
+	if (search != _IDHitRefs.end()) {
+		return search->second.IncreaseDamagedCount();
+	}
+}
+
 uint32_t AttackCollisions::GetIDHitCount(uint8_t a_ID) const
 {
 	auto search = _IDHitRefs.find(a_ID);
@@ -629,6 +669,16 @@ uint32_t AttackCollisions::GetIDHitNPCCount(uint8_t a_ID) const
 	auto search = _IDHitRefs.find(a_ID);
 	if (search != _IDHitRefs.end()) {
 		return search->second.GetHitNPCCount();
+	}
+
+	return 0;
+}
+
+uint32_t AttackCollisions::GetIDDamagedCount(uint8_t a_ID) const
+{
+	auto search = _IDHitRefs.find(a_ID);
+	if (search != _IDHitRefs.end()) {
+		return search->second.GetDamagedCount();
 	}
 
 	return 0;

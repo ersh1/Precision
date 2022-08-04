@@ -44,6 +44,13 @@ struct AttackDefinition
 	std::vector<CollisionDefinition> collisions;
 };
 
+enum class SweepAttackMode : std::uint32_t
+{
+	kUnlimited = 0,
+	kMaxTargets = 1,
+	kDiminishingReturns = 2
+};
+
 struct Settings
 {
 	static void Initialize();
@@ -63,17 +70,21 @@ struct Settings
 	static inline bool bNoNonHostileAttackCollision = true;
 	static inline bool bDisablePhysicalCollisionOnHit = true;
 	static inline float fWeaponReachMult = 85.f;
-	static inline float fWeaponLengthMult = 1.f;
+	static inline float fWeaponLengthMult = 1.2f;
 	static inline float fWeaponCapsuleRadius = 12.f;
 	static inline float fDefaultCollisionLifetime = 0.25f;
 	static inline float fDefaultCollisionLifetimePowerAttackMult = 1.6f;
 	static inline float fHitSameRefCooldown = 0.10f;
-	static inline float fFirstPersonPlayerWeaponReachMult = 1.2f;
+	static inline float fFirstPersonPlayerWeaponReachMult = 1.f;
 	static inline float fFirstPersonPlayerCapsuleRadiusMult = 1.5f;
-	static inline float fThirdPersonPlayerWeaponReachMult = 1.2f;
+	static inline float fThirdPersonPlayerWeaponReachMult = 1.f;
 	static inline float fThirdPersonPlayerCapsuleRadiusMult = 1.5f;
 	static inline float fMountedWeaponReachMult = 1.5f;
 	static inline float fMountedCapsuleRadiusMult = 1.5f;
+	static inline SweepAttackMode uSweepAttackMode = SweepAttackMode::kUnlimited;
+	static inline uint32_t uMaxTargetsNoSweepAttack = 1;
+	static inline uint32_t uMaxTargetsSweepAttack = 0;
+	static inline float fSweepAttackDiminishingReturnsFactor = 0.5f;
 
 	// Trails
 	static inline bool bDisplayTrails = true;
@@ -121,6 +132,7 @@ struct Settings
 	static inline bool bApplyImpulseOnHit = true;
 	static inline bool bApplyImpulseOnKill = true;
 	static inline float fHitImpulseBaseMult = 1.f;
+	static inline float fHitImpulseBlockMult = 0.6f;
 	static inline float fHitImpulsePowerAttackMult = 2.f;
 	static inline float fHitImpulseRagdollMult = 1.f;
 	static inline float fHitImpulseKillMult = 1.f;

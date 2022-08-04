@@ -31,13 +31,18 @@ bool HitRefs::HasHitRef(RE::ObjectRefHandle a_handle) const
 void HitRefs::AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC)
 {
 	hitRefs.emplace(a_handle, a_duration);
-	hitCount++;
+	++hitCount;
 	if (a_bIsNPC) {
-		hitNPCCount++;
+		++hitNPCCount;
 	}
 }
 
 void HitRefs::ClearHitRefs()
 {
 	hitRefs.clear();
+}
+
+void HitRefs::IncreaseDamagedCount()
+{
+	++damagedCount;
 }

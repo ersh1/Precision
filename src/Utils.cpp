@@ -385,6 +385,21 @@ namespace Utils
 		return false;
 	}
 
+	bool IsSweepAttackActive(RE::ActorHandle a_actorHandle, bool a_bIsLeftHand /*= false*/)
+	{
+		if (auto actor = a_actorHandle.get()) {
+			float ret = 0.f;
+			RE::TESBoundObject* object = nullptr;
+			if (auto inventoryEntryData = AIProcess_GetCurrentlyEquippedWeapon(actor->currentProcess, a_bIsLeftHand)) {
+				object = inventoryEntryData->object;
+			}
+			ApplyPerkEntryPoint(RE::BGSEntryPointPerkEntry::EntryPoint::kSetSweepAttack, actor.get(), object, ret);
+			return ret != 0.f;
+		}
+		
+		return false;
+	}
+
 	void ForEachRagdollDriver(RE::TESObjectREFR* a_refr, std::function<void(RE::hkbRagdollDriver*)> a_func)
 	{
 		RE::BSAnimationGraphManagerPtr animGraphManager;

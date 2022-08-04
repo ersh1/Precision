@@ -53,10 +53,8 @@ void PendingHit::DoHit()
 	}
 
 	// add modifiers from the attack collision
-	if (attackCollision) {
-		damageMultiplicative += attackCollision->damageMult - multiplicativeBias;
-		staggerMultiplicative += attackCollision->staggerMult - multiplicativeBias;
-	}
+	damageMultiplicative += attackCollision->damageMult - multiplicativeBias;
+	staggerMultiplicative += attackCollision->staggerMult - multiplicativeBias;
 
 	// create an artificial hkpCdPoint to insert into the point collector
 	RE::hkpCdPoint cdPoint;
@@ -83,6 +81,13 @@ void PendingHit::DoHit()
 
 	damageMult = (damageMult + damageAdditive) * damageMultiplicative;
 	staggerMult = (staggerMult + staggerAdditive) * staggerMultiplicative;
+
+	// sweep attack diminishing returns
+	if (Settings::uSweepAttackMode == SweepAttackMode::kDiminishingReturns && !Utils::IsSweepAttackActive(attacker->GetHandle())) {
+		auto damagedCount = attackCollision->GetDamagedCount();
+		float diminishingReturnsMultiplier = pow(Settings::fSweepAttackDiminishingReturnsFactor, damagedCount);
+		damageMult *= diminishingReturnsMultiplier;
+	}
 
 	// Cache the precise vectors etc so they are used in the hooked functions instead of vanilla ones
 	PrecisionHandler::cachedAttackData.SetPreciseHitVectors(niHitPos, niHitVelocity);
@@ -115,6 +120,8 @@ void PendingHit::DoHit()
 		PrecisionHandler::cachedAttackData.SetLastHitNode(GetNodeFromCollidable(&hitRigidBody->collidable));
 
 		DealDamage(attacker.get(), targetActor, nullptr, bIsLeftHand);
+
+		attackCollision->IncreaseDamagedCount();
 
 		// send hit events
 		{
@@ -163,6 +170,7 @@ void PendingHit::DoHit()
 				}
 
 				bool bIsInRagdollState = targetActor->IsInRagdollState();
+				bool bIsBlocking = targetActor->IsBlocking();
 
 				if (bIsInRagdollState) {
 					impulseMult *= Settings::fHitImpulseRagdollMult;
@@ -170,6 +178,10 @@ void PendingHit::DoHit()
 
 				if (bJustKilled) {
 					impulseMult *= Settings::fHitImpulseKillMult;
+				}
+
+				if (bIsBlocking) {
+					impulseMult *= Settings::fHitImpulseBlockMult;
 				}
 
 				if (!bIsInRagdollState || bIsDead) {  // don't apply impulse to ragdolled alive targets because they won't be able to get up when regularly hit

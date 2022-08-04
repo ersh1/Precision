@@ -222,6 +222,8 @@ namespace Utils
 	// returns true if actor is player's teammate, summon, or teammate's summon
 	[[nodiscard]] bool IsPlayerTeammateOrSummon(RE::Actor* a_actor);
 
+	[[nodiscard]] bool IsSweepAttackActive(RE::ActorHandle a_actorHandle, bool a_bIsLeftHand = false);
+
 	void ForEachRagdollDriver(RE::TESObjectREFR* a_refr, std::function<void(RE::hkbRagdollDriver*)> a_func);
 	void ForEachAdjacentBody(RE::hkbRagdollDriver* a_driver, RE::hkpRigidBody* a_body, std::function<void(RE::hkpRigidBody*)> a_func);
 

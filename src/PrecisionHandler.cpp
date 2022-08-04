@@ -83,9 +83,9 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 	std::string_view eventTag = a_event->tag.data();
 
-	if (actor == RE::PlayerCharacter::GetSingleton()) {
+	/*if (actor == RE::PlayerCharacter::GetSingleton()) {
 		logger::debug("{}", a_event->tag);
-	}
+	}*/
 
 	switch (hash(eventTag.data(), eventTag.size())) {
 	case "Collision_AttackStart"_h:
@@ -106,7 +106,15 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 				bool bIsWPNSwingUnarmed = a_event->tag == "SoundPlay.WPNSwingUnarmed";
 				if ((bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWeaponSwing(actorHandle)) || (!bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle))) {
 					AttackDefinition attackDefinition;
-					bool bIsLeftSwing = a_event->tag == "weaponLeftSwing"sv;
+					if (bIsWPNSwingUnarmed) {
+						SetStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle);
+					} else {
+						SetStartedDefaultCollisionWithWeaponSwing(actorHandle);
+					}
+					std::optional<bool> bIsLeftSwing = std::nullopt;
+					if (!bIsWPNSwingUnarmed) {
+						bIsLeftSwing = a_event->tag == "weaponLeftSwing"sv;
+					}
 					if (GetAttackCollisionDefinition(actor, attackDefinition, bIsLeftSwing)) {
 						AddAttack(actor->GetHandle(), attackDefinition);
 					}
@@ -653,6 +661,22 @@ bool PrecisionHandler::HasStartedPrecisionCollision(RE::ActorHandle a_actorHandl
 	return false;
 }
 
+void PrecisionHandler::SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle)
+{
+	WriteLocker locker(attackCollisionsLock);
+	
+	auto& attackCollisions = _actorsWithAttackCollisions[a_actorHandle];
+	attackCollisions.bStartedWithWeaponSwing = true;
+}
+
+void PrecisionHandler::SetStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle)
+{
+	WriteLocker locker(attackCollisionsLock);
+
+	auto& attackCollisions = _actorsWithAttackCollisions[a_actorHandle];
+	attackCollisions.bStartedWithWPNSwingUnarmed = true;
+}
+
 bool PrecisionHandler::HasHitRef(RE::ActorHandle a_actorHandle, RE::ObjectRefHandle a_handle) const
 {
 	ReadLocker locker(attackCollisionsLock);
@@ -741,6 +765,16 @@ void PrecisionHandler::ClearIDHitRefs(RE::ActorHandle a_actorHandle, uint8_t a_I
 	}
 }
 
+void PrecisionHandler::IncreaseIDDamagedCount(RE::ActorHandle a_actorHandle, uint8_t a_ID)
+{
+	ReadLocker locker(attackCollisionsLock);
+
+	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+	if (search != _actorsWithAttackCollisions.end()) {
+		search->second.IncreaseIDDamagedCount(a_ID);
+	}
+}
+
 uint32_t PrecisionHandler::GetIDHitCount(RE::ActorHandle a_actorHandle, uint8_t a_ID) const
 {
 	ReadLocker locker(attackCollisionsLock);
@@ -760,6 +794,18 @@ uint32_t PrecisionHandler::GetIDHitNPCCount(RE::ActorHandle a_actorHandle, uint8
 	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
 	if (search != _actorsWithAttackCollisions.end()) {
 		return search->second.GetIDHitNPCCount(a_ID);
+	}
+
+	return 0;
+}
+
+uint32_t PrecisionHandler::GetIDDamagedCount(RE::ActorHandle a_actorHandle, uint8_t a_ID) const
+{
+	ReadLocker locker(attackCollisionsLock);
+
+	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+	if (search != _actorsWithAttackCollisions.end()) {
+		return search->second.GetIDDamagedCount(a_ID);
 	}
 
 	return 0;
@@ -793,7 +839,7 @@ void PrecisionHandler::ProcessPrePhysicsStepJobs()
 	}
 }
 
-bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, bool bIsLeftSwing /*= false*/) const
+bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> bIsLeftSwing /*= std::nullopt*/) const
 {
 	if (!a_actor) {
 		return false;
@@ -818,9 +864,11 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 
 	auto& attackData = Actor_GetAttackData(a_actor);
 
-	if (attackData && attackData->IsLeftAttack() != bIsLeftSwing) {
-		attackData = GetOppositeAttackEvent(attackData, race->attackDataMap.get());
-	}
+	if (bIsLeftSwing.has_value()) {
+		if (attackData && attackData->IsLeftAttack() != bIsLeftSwing) {
+			attackData = GetOppositeAttackEvent(attackData, race->attackDataMap.get());
+		}
+	}	
 
 	auto defIt = attackDefinitions.find(attackData ? attackData->event.c_str() : "DEFAULT");
 	if (defIt == attackDefinitions.end()) {

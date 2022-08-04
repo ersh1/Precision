@@ -17,6 +17,7 @@ namespace Hooks
 
 		UpdateHooks::Hook();
 		AttackHooks::Hook();
+		AttackReachHooks::Hook();
 
 		HavokHooks::Hook();
 
@@ -26,6 +27,11 @@ namespace Hooks
 		FirstPersonStateHook::Hook();
 
 		logger::trace("...success");
+	}
+
+	bool ActorHasAttackCollision(const RE::ActorHandle a_actorHandle)
+	{
+		return Settings::bAttackCollisionsEnabled && PrecisionHandler::GetSingleton()->HasActor(a_actorHandle);
 	}
 
 	void UpdateHooks::Nullsub()
@@ -176,11 +182,6 @@ namespace Hooks
 		}*/
 
 		return _HitData_GetStagger(a_source, a_target, a_weapon, a4) * PrecisionHandler::cachedAttackData.GetStaggerMult();
-	}
-
-	bool AttackHooks::ActorHasAttackCollision(const RE::ActorHandle a_actorHandle)
-	{
-		return Settings::bAttackCollisionsEnabled && PrecisionHandler::GetSingleton()->HasActor(a_actorHandle);
 	}
 
 	RE::NiPointer<RE::BGSAttackData>& AttackHooks::FixAttackData(RE::NiPointer<RE::BGSAttackData>& a_attackData, RE::TESRace* a_race)
@@ -341,10 +342,6 @@ namespace Hooks
 				auto charController = actor->GetCharController();
 				if (charController) {
 					charController->GetCollisionFilterInfo(filterInfo);
-
-					if (charController->flags.any(RE::CHARACTER_FLAGS::kNoCharacterCollisions)) {
-						logger::debug("!");
-					}
 				}
 				uint16_t collisionGroup = filterInfo >> 16;
 
@@ -702,6 +699,13 @@ namespace Hooks
 			return false;
 		}
 
+		if (a_actorHandle.native_handle() == 0x100000) {
+			// if player, check if racemenu is open
+			if (RE::UI::GetSingleton()->IsMenuOpen(RE::RaceSexMenu::MENU_NAME)) {
+				return false;
+			}
+		}
+			
 		RE::Actor* actor = a_actorHandle.get().get();
 
 		RE::BSAnimationGraphManagerPtr animGraphManager;
@@ -1531,4 +1535,50 @@ namespace Hooks
 
 		PrecisionHandler::GetSingleton()->RemoveAllAttackCollisions(RE::PlayerCharacter::GetSingleton()->GetHandle());
 	}
+
+	float AttackReachHooks::GetReach1(RE::Actor* a_actor)
+	{
+		float ret = _GetReach1(a_actor);
+
+		auto actorHandle = a_actor->GetHandle();
+
+		float capsuleLength = PrecisionHandler::GetSingleton()->GetAttackCollisionCapsuleLength(actorHandle);
+
+		return capsuleLength > 0.f ? capsuleLength : ret;
+	}
+
+
+	float AttackReachHooks::GetReach2(RE::Actor* a_actor)
+	{
+		float ret = _GetReach2(a_actor);
+
+		auto actorHandle = a_actor->GetHandle();
+
+		float capsuleLength = PrecisionHandler::GetSingleton()->GetAttackCollisionCapsuleLength(actorHandle);
+
+		return capsuleLength > 0.f ? capsuleLength : ret;
+	}
+
+	float AttackReachHooks::GetReach3(RE::Actor* a_actor)
+	{
+		float ret = _GetReach3(a_actor);
+
+		auto actorHandle = a_actor->GetHandle();
+
+		float capsuleLength = PrecisionHandler::GetSingleton()->GetAttackCollisionCapsuleLength(actorHandle);
+
+		return capsuleLength > 0.f ? capsuleLength : ret;
+	}
+
+	float AttackReachHooks::GetWeaponReach1(RE::Actor* a_actor, RE::TESObjectWEAP* a_weapon)
+	{
+		float ret = _GetWeaponReach1(a_actor, a_weapon);
+		
+		auto actorHandle = a_actor->GetHandle();
+
+		float capsuleLength = PrecisionHandler::GetSingleton()->GetAttackCollisionCapsuleLength(actorHandle);
+
+		return capsuleLength > 0.f ? capsuleLength : ret;
+	}
+
 }

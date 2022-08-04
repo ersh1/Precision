@@ -266,3 +266,6 @@ static REL::Relocation<tPlayWaterImpact> PlayWaterImpact{ RELOCATION_ID(31297, 3
 
 typedef bool (*tBSSoundHandle_SetPosition)(RE::BSSoundHandle* a_this, float a_x, float a_y, float a_z);
 static REL::Relocation<tBSSoundHandle_SetPosition> BSSoundHandle_SetPosition{ RE::Offset::BSSoundHandle::SetPosition };
+
+typedef void (*tApplyPerkEntryPoint)(RE::BGSEntryPoint::ENTRY_POINT a_entryPoint, RE::Actor* a_actor, RE::TESBoundObject* a_object, float& a_outResult);
+static REL::Relocation<tApplyPerkEntryPoint> ApplyPerkEntryPoint{ RELOCATION_ID(23073, 23526) };  // 32ECE0, 3444C0
