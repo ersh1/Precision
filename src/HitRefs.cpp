@@ -2,34 +2,41 @@
 
 void HitRefs::Update(float a_deltaTime)
 {
+	WriteLocker locker(lock);
+
 	// remove hit refs after cooldown
-	auto hitRefIt = hitRefs.begin();
-	while (hitRefIt != hitRefs.end()) {
-		if (hitRefIt->second != FLT_MAX) {
-			hitRefIt->second -= a_deltaTime;
-			if (hitRefIt->second < 0.f) {
-				hitRefIt = hitRefs.erase(hitRefIt);
-			} else {
-				++hitRefIt;
-			}
+	for (auto it = hitRefs.begin(); it != hitRefs.end();) {
+		if (it->second == FLT_MAX) {
+			++it;
 		} else {
-			++hitRefIt;
+			it->second -= a_deltaTime;
+			if (it->second < 0.f) {
+				it = hitRefs.erase(it);
+			} else {
+				++it;
+			}
 		}
 	}
 }
 
 bool HitRefs::IsEmpty() const
 {
+	ReadLocker locker(lock);
+	
 	return hitRefs.empty();
 }
 
 bool HitRefs::HasHitRef(RE::ObjectRefHandle a_handle) const
 {
+	ReadLocker locker(lock);
+	
 	return hitRefs.contains(a_handle);
 }
 
 void HitRefs::AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC)
 {
+	WriteLocker locker(lock);
+	
 	hitRefs.emplace(a_handle, a_duration);
 	++hitCount;
 	if (a_bIsNPC) {
@@ -39,6 +46,8 @@ void HitRefs::AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_b
 
 void HitRefs::ClearHitRefs()
 {
+	WriteLocker locker(lock);
+	
 	hitRefs.clear();
 }
 

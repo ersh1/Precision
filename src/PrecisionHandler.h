@@ -53,7 +53,7 @@ public:
 
 	void StartCollision(RE::ActorHandle a_actorHandle, uint32_t a_activeGraphIdx);
 	bool AddAttack(RE::ActorHandle a_actorHandle, const AttackDefinition& a_attackDefinition);
-	bool AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
+	void AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
 	bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
 	bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision);
 	bool RemoveAllAttackCollisions(RE::ActorHandle a_actorHandle);
@@ -65,6 +65,8 @@ public:
 	[[nodiscard]] bool HasStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle) const;
 	[[nodiscard]] bool HasStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle) const;
 	[[nodiscard]] bool HasStartedPrecisionCollision(RE::ActorHandle a_actorHandle, uint32_t a_activeGraphIdx) const;
+
+	[[nodiscard]] bool HasHitstop(RE::ActorHandle a_actorHandle) const;
 
 	void SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle);
 	void SetStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle);
@@ -91,7 +93,7 @@ public:
 	void ApplyHitImpulse(RE::ObjectRefHandle a_refHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult, bool a_bIsActiveRagdoll);
 
 	void AddHitstop(RE::ActorHandle a_refHandle, float a_hitstopLength);
-	[[nodiscard]] static float GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaTime, bool a_bUpdate);
+	[[nodiscard]] float GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaTime, bool a_bUpdate);
 
 	void ApplyCameraShake(float a_strength, float a_length, float a_frequency, const RE::NiPoint3& a_axis);
 
@@ -148,6 +150,7 @@ private:
 
 	mutable Lock attackCollisionsLock;
 	mutable Lock callbacksLock;
+	mutable Lock activeHitstopsLock;
 
 	PrecisionHandler();
 	PrecisionHandler(const PrecisionHandler&) = delete;
@@ -165,14 +168,6 @@ private:
 	friend struct PendingHit;
 
 	void StartCollision_Impl(RE::ActorHandle a_actorHandle, uint32_t a_activeGraphIdx);
-	bool AddAttack_Impl(RE::ActorHandle a_actorHandle, const AttackDefinition& a_attackDefinition);
-	bool AddAttackCollision_Impl(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
-	bool RemoveAttackCollision_Impl(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
-	bool RemoveAttackCollision_Impl(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision);
-	bool RemoveAllAttackCollisions_Impl(RE::ActorHandle a_actorHandle);
-	void RemoveActor_Impl(RE::ActorHandle a_actorHandle);
-	std::shared_ptr<AttackCollision> GetAttackCollision_Impl(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const;
-	std::shared_ptr<AttackCollision> GetAttackCollision_Impl(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const;
 
 	static RE::NiPoint3 CalculateHitImpulse(RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, float a_impulseMult, bool a_bIsActiveRagdoll);
 
@@ -210,7 +205,7 @@ private:
 					// don't run for actors with hitstop until the hitstop ends
 					if (ptr->formType == RE::FormType::ActorCharacter) {
 						auto actor = ptr->As<RE::Actor>();
-						if (activeHitstops.contains(actor->GetHandle())) {
+						if (PrecisionHandler::GetSingleton()->HasHitstop(actor->GetHandle())) {
 							// refresh impulse timer
 							Utils::ForEachRagdollDriver(actor, [=](RE::hkbRagdollDriver* driver) {
 								ActiveRagdoll& ragdoll = activeRagdolls[driver];
@@ -253,7 +248,7 @@ private:
 					// don't run for actors with hitstop until the hitstop ends
 					if (ptr->formType == RE::FormType::ActorCharacter) {
 						auto actor = ptr->As<RE::Actor>();
-						if (activeHitstops.contains(actor->GetHandle())) {
+						if (PrecisionHandler::GetSingleton()->HasHitstop(actor->GetHandle())) {
 							// refresh impulse timer
 							Utils::ForEachRagdollDriver(actor, [=](RE::hkbRagdollDriver* driver) {
 								ActiveRagdoll& ragdoll = activeRagdolls[driver];

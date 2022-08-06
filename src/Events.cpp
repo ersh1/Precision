@@ -57,7 +57,7 @@ namespace Events
 				}
 
 				if (key == Settings::uToggleKey) {
-					Settings::bAttackCollisionsEnabled = !Settings::bAttackCollisionsEnabled;
+					Settings::bDisableMod = !Settings::bDisableMod;
 					//#undef GetObject
 					//					using DefaultObject = RE::BGSDefaultObjectManager::DefaultObject;
 					//					auto defaultObjectManager = RE::BGSDefaultObjectManager::GetSingleton();

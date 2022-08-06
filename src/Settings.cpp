@@ -43,148 +43,160 @@ void Settings::ReadSettings()
 		logger::info("  Reading {}...", path.string());
 		try {
 			const auto tbl = toml::parse_file(path.c_str());
-			auto& attackDefinitionsArr = *tbl.get_as<toml::array>("AttackDefinitions");
-			for (auto&& elem : attackDefinitionsArr) {
-				auto& definitionsTbl = *elem.as_table();
-				auto formIDs = definitionsTbl["BodyPartDataFormIDs"].as_array();
-				for (auto& formIDEntry : *formIDs) {
-					auto formID = formIDEntry.value<uint32_t>();
-					auto pluginName = definitionsTbl["Plugin"].value<std::string_view>();
-					auto bodyPartData = dataHandler->LookupForm<RE::BGSBodyPartData>(*formID, *pluginName);
-					if (bodyPartData) {
-						auto& attackDefs = attackDefinitions[bodyPartData];
+			auto attackDefinitionsArr = tbl.get_as<toml::array>("AttackDefinitions");
+			if (attackDefinitionsArr) {
+				for (auto&& elem : *attackDefinitionsArr) {
+					auto& definitionsTbl = *elem.as_table();
+					auto formIDs = definitionsTbl["BodyPartDataFormIDs"].as_array();
+					if (formIDs) {
+						for (auto& formIDEntry : *formIDs) {
+							auto formID = formIDEntry.value<uint32_t>();
+							auto pluginName = definitionsTbl["Plugin"].value<std::string_view>();
+							auto bodyPartData = dataHandler->LookupForm<RE::BGSBodyPartData>(*formID, *pluginName);
+							if (bodyPartData) {
+								auto& attackDefs = attackDefinitions[bodyPartData];
 
-						auto attacksArr = definitionsTbl["Attacks"].as_array();
-						for (auto&& attackEntry : *attacksArr) {
-							// read attack
-							auto& attackTbl = *attackEntry.as_table();
+								auto attacksArr = definitionsTbl["Attacks"].as_array();
+								if (attacksArr) {
+									for (auto&& attackEntry : *attacksArr) {
+										// read attack
+										auto& attackTbl = *attackEntry.as_table();
 
-							// event name
-							auto eventNames = attackTbl["EventNames"].as_array();
-							for (auto& eventNameEntry : *eventNames) {
-								auto eventName = eventNameEntry.value<std::string_view>();
+										// event name
+										auto eventNames = attackTbl["EventNames"].as_array();
+										if (eventNames) {
+											for (auto& eventNameEntry : *eventNames) {
+												auto eventName = eventNameEntry.value<std::string_view>();
 
-								std::vector<CollisionDefinition> collisionDefs{};
+												std::vector<CollisionDefinition> collisionDefs{};
 
-								// read collision
-								auto collisionArr = attackTbl["Collisions"].as_array();
-								for (auto&& collisionEntry : *collisionArr) {
-									auto& collisionTbl = *collisionEntry.as_table();
+												// read collision
+												auto collisionArr = attackTbl["Collisions"].as_array();
+												if (collisionArr) {
+													for (auto&& collisionEntry : *collisionArr) {
+														auto& collisionTbl = *collisionEntry.as_table();
 
-									// node name
-									auto nodeName = collisionTbl["NodeName"].value<std::string_view>();
+														// node name
+														auto nodeName = collisionTbl["NodeName"].value<std::string_view>();
 
-									auto ID = collisionTbl["ID"].value<uint8_t>();
+														auto ID = collisionTbl["ID"].value<uint8_t>();
 
-									// no recoil
-									bool bNoRecoil = false;
-									auto noRecoilVal = collisionTbl["NoRecoil"].value<bool>();
-									if (noRecoilVal) {
-										bNoRecoil = *noRecoilVal;
-									}
+														// no recoil
+														bool bNoRecoil = false;
+														auto noRecoilVal = collisionTbl["NoRecoil"].value<bool>();
+														if (noRecoilVal) {
+															bNoRecoil = *noRecoilVal;
+														}
 
-									// no trail
-									bool bNoTrail = false;
-									auto noTrailVal = collisionTbl["NoTrail"].value<bool>();
-									if (noTrailVal) {
-										bNoTrail = *noTrailVal;
-									}
+														// no trail
+														bool bNoTrail = false;
+														auto noTrailVal = collisionTbl["NoTrail"].value<bool>();
+														if (noTrailVal) {
+															bNoTrail = *noTrailVal;
+														}
 
-									// weapon tip
-									bool bWeaponTip = false;
-									auto weaponTipVal = collisionTbl["WeaponTip"].value<bool>();
-									if (weaponTipVal) {
-										bWeaponTip = *weaponTipVal;
-									}
+														// weapon tip
+														bool bWeaponTip = false;
+														auto weaponTipVal = collisionTbl["WeaponTip"].value<bool>();
+														if (weaponTipVal) {
+															bWeaponTip = *weaponTipVal;
+														}
 
-									// damage mult
-									float damageMult = 1.f;
-									auto damageMultVal = collisionTbl["DamageMult"].value<float>();
-									if (damageMultVal) {
-										damageMult = *damageMultVal;
-									}
+														// damage mult
+														float damageMult = 1.f;
+														auto damageMultVal = collisionTbl["DamageMult"].value<float>();
+														if (damageMultVal) {
+															damageMult = *damageMultVal;
+														}
 
-									// duration
-									float duration = 0.f;
-									auto durationVal = collisionTbl["Duration"].value<float>();
-									if (durationVal) {
-										duration = *durationVal;
-									}
+														// duration
+														float duration = 0.f;
+														auto durationVal = collisionTbl["Duration"].value<float>();
+														if (durationVal) {
+															duration = *durationVal;
+														}
 
-									// radius
-									auto radius = collisionTbl["Radius"].value<float>();
+														// radius
+														auto radius = collisionTbl["Radius"].value<float>();
 
-									// length
-									auto length = collisionTbl["Length"].value<float>();
+														// length
+														auto length = collisionTbl["Length"].value<float>();
 
-									// transform
-									std::optional<RE::NiTransform> transform;
-									{
-										const auto fillVector = [&](const toml::table* a_table, RE::NiPoint3& a_outVector) {
-											if (a_table) {
-												auto x = a_table->get("x");
-												if (x) {
-													a_outVector.x = *x->value<float>();
+														// transform
+														std::optional<RE::NiTransform> transform;
+														{
+															const auto fillVector = [&](const toml::table* a_table, RE::NiPoint3& a_outVector) {
+																if (a_table) {
+																	auto x = a_table->get("x");
+																	if (x) {
+																		a_outVector.x = *x->value<float>();
+																	}
+																	auto y = a_table->get("y");
+																	if (y) {
+																		a_outVector.y = *y->value<float>();
+																	}
+																	auto z = a_table->get("z");
+																	if (x) {
+																		a_outVector.z = *z->value<float>();
+																	}
+																}
+															};
+
+															auto rotationTbl = collisionTbl["Rotation"].as_table();
+															auto translationTbl = collisionTbl["Translation"].as_table();
+															auto scaleVal = collisionTbl["Scale"].value<float>();
+
+															if (rotationTbl || translationTbl || scaleVal) {
+																transform = RE::NiTransform();
+
+																// rotation
+																if (rotationTbl) {
+																	RE::NiPoint3 rotationVector{ 0.f, 0.f, 0.f };
+																	fillVector(rotationTbl, rotationVector);
+																	rotationVector.x = Utils::DegreeToRadian(rotationVector.x);
+																	rotationVector.y = Utils::DegreeToRadian(rotationVector.y);
+																	rotationVector.z = Utils::DegreeToRadian(rotationVector.z);
+																	transform->rotate.SetEulerAnglesXYZ(rotationVector);
+																}
+
+																// translation
+																if (translationTbl) {
+																	fillVector(translationTbl, transform->translate);
+																}
+
+																// scale
+																if (scaleVal) {
+																	transform->scale = *scaleVal;
+																}
+															}
+														}
+
+														collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bWeaponTip, damageMult, duration, radius, length, transform);
+													}
+
+													attackDefs.emplace(*eventName, AttackDefinition(collisionDefs));
 												}
-												auto y = a_table->get("y");
-												if (y) {
-													a_outVector.y = *y->value<float>();
-												}
-												auto z = a_table->get("z");
-												if (x) {
-													a_outVector.z = *z->value<float>();
-												}
-											}
-										};
-
-										auto rotationTbl = collisionTbl["Rotation"].as_table();
-										auto translationTbl = collisionTbl["Translation"].as_table();
-										auto scaleVal = collisionTbl["Scale"].value<float>();
-
-										if (rotationTbl || translationTbl || scaleVal) {
-											transform = RE::NiTransform();
-
-											// rotation
-											if (rotationTbl) {
-												RE::NiPoint3 rotationVector{ 0.f, 0.f, 0.f };
-												fillVector(rotationTbl, rotationVector);
-												rotationVector.x = Utils::DegreeToRadian(rotationVector.x);
-												rotationVector.y = Utils::DegreeToRadian(rotationVector.y);
-												rotationVector.z = Utils::DegreeToRadian(rotationVector.z);
-												transform->rotate.SetEulerAnglesXYZ(rotationVector);
-											}
-
-											// translation
-											if (translationTbl) {
-												fillVector(translationTbl, transform->translate);
-											}
-
-											// scale
-											if (scaleVal) {
-												transform->scale = *scaleVal;
 											}
 										}
 									}
-
-									collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bWeaponTip, damageMult, duration, radius, length, transform);
 								}
-
-								attackDefs.emplace(*eventName, AttackDefinition(collisionDefs));
 							}
 						}
 					}
 				}
-			}
+			}			
 
-			auto& attackEventPairArr = *tbl.get_as<toml::array>("AttackEventPair");
-			for (auto&& elem : attackEventPairArr) {
-				auto& attackEventPairTbl = *elem.as_table();
-				auto rightEvent = attackEventPairTbl["RightEvent"].value<std::string_view>();
-				auto leftEvent = attackEventPairTbl["LeftEvent"].value<std::string_view>();
-				if (rightEvent && leftEvent) {
-					attackEventPairs.emplace_back(*rightEvent, *leftEvent);
+			auto attackEventPairArr = tbl.get_as<toml::array>("AttackEventPair");
+			if (attackEventPairArr) {
+				for (auto&& elem : *attackEventPairArr) {
+					auto& attackEventPairTbl = *elem.as_table();
+					auto rightEvent = attackEventPairTbl["RightEvent"].value<std::string_view>();
+					auto leftEvent = attackEventPairTbl["LeftEvent"].value<std::string_view>();
+					if (rightEvent && leftEvent) {
+						attackEventPairs.emplace_back(*rightEvent, *leftEvent);
+					}
 				}
-			}
+			}			
 		} catch (const toml::parse_error& e) {
 			std::ostringstream ss;
 			ss

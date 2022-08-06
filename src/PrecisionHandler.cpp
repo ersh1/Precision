@@ -59,7 +59,7 @@ constexpr uint32_t operator"" _h(const char* str, size_t size) noexcept
 
 PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimationGraphEvent* a_event, RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_eventSource)
 {
-	if (!a_event || !a_event->holder || !Settings::bAttackCollisionsEnabled) {
+	if (!a_event || !a_event->holder || !Settings::bAttackCollisionsEnabled || Settings::bDisableMod) {
 		return EventResult::kContinue;
 	}
 
@@ -83,9 +83,9 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 	std::string_view eventTag = a_event->tag.data();
 
-	/*if (actor == RE::PlayerCharacter::GetSingleton()) {
+	if (actor == RE::PlayerCharacter::GetSingleton()) {
 		logger::debug("{}", a_event->tag);
-	}*/
+	}
 
 	switch (hash(eventTag.data(), eventTag.size())) {
 	case "Collision_AttackStart"_h:
@@ -176,7 +176,7 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 void PrecisionHandler::Update(float a_deltaTime)
 {
-	if (!Settings::bAttackCollisionsEnabled) {
+	if (!Settings::bAttackCollisionsEnabled || Settings::bDisableMod) {
 		Clear();
 	}
 
@@ -231,22 +231,12 @@ void PrecisionHandler::Update(float a_deltaTime)
 				it = _actorsWithAttackCollisions.erase(it);
 			} else {
 				auto actor = it->first.get();
-				if (!actor || !actor->parentCell || !actor->parentCell->GetbhkWorld() || !actor->Get3D() || (!it->second.ignoreVanillaAttackEvents && it->second.attackCollisions.empty())) {
+				if (!actor || !actor->parentCell || !actor->parentCell->GetbhkWorld() || !actor->Get3D() || (!it->second.ignoreVanillaAttackEvents && it->second.IsEmpty())) {
 					//++it;
 					//RemoveActor_Impl(actorHandle);
 					it = _actorsWithAttackCollisions.erase(it);
 				} else {
 					it->second.Update(a_deltaTime);
-					for (int i = 0; i < it->second.attackCollisions.size();) {
-						auto& collision = it->second.attackCollisions[i];
-						if (!collision->Update(a_deltaTime)) {
-							if (!RemoveAttackCollision_Impl(it->first, collision)) {
-								++i;
-							}
-						} else {
-							++i;
-						}
-					}
 					++it;
 				}
 			}
@@ -305,6 +295,8 @@ void PrecisionHandler::ApplyHitImpulse(RE::ObjectRefHandle a_refHandle, RE::hkpR
 void PrecisionHandler::AddHitstop(RE::ActorHandle a_refHandle, float a_hitstopLength)
 {
 	if (Settings::bEnableHitstop) {
+		WriteLocker locker(activeHitstopsLock);
+
 		auto& hitstop = activeHitstops[a_refHandle];
 		hitstop += a_hitstopLength;
 	}
@@ -314,8 +306,10 @@ float PrecisionHandler::GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaT
 {
 	if (Settings::bEnableHitstop) {
 		if (a_deltaTime > 0.f) {
-			auto hitstop = PrecisionHandler::activeHitstops.find(a_actorHandle);
-			if (hitstop != PrecisionHandler::activeHitstops.end()) {
+			WriteLocker locker(activeHitstopsLock);
+			
+			auto hitstop = activeHitstops.find(a_actorHandle);
+			if (hitstop != activeHitstops.end()) {
 				float newHitstopLength = hitstop->second - a_deltaTime;
 				if (a_bUpdate) {
 					hitstop->second = newHitstopLength;
@@ -325,7 +319,7 @@ float PrecisionHandler::GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaT
 				if (newHitstopLength <= 0.f) {
 					mult = (a_deltaTime + newHitstopLength) / a_deltaTime;
 					if (a_bUpdate) {
-						PrecisionHandler::activeHitstops.erase(hitstop);
+						activeHitstops.erase(hitstop);
 					}
 				}
 
@@ -358,153 +352,6 @@ void PrecisionHandler::StartCollision_Impl(RE::ActorHandle a_actorHandle, uint32
 	// create the entry in the map and set the bool
 	auto& attackCollisions = _actorsWithAttackCollisions[a_actorHandle];
 	attackCollisions.ignoreVanillaAttackEvents = a_activeGraphIdx;
-}
-
-bool PrecisionHandler::AddAttack_Impl(RE::ActorHandle a_actorHandle, const AttackDefinition& a_attackDefinition)
-{
-	for (auto& collisionDef : a_attackDefinition.collisions) {
-		AddAttackCollision_Impl(a_actorHandle, collisionDef);
-	}
-
-	return true;
-}
-
-bool PrecisionHandler::AddAttackCollision_Impl(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
-{
-	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
-
-	activeActor.attackCollisions.emplace_back(std::make_shared<AttackCollision>(a_actorHandle, a_collisionDefinition));
-
-	return true;
-}
-
-bool PrecisionHandler::RemoveAttackCollision_Impl(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision)
-{
-	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
-		return false;
-	}
-
-	auto actor = a_actorHandle.get().get();
-	if (!actor) {
-		return false;
-	}
-
-	auto cell = actor->GetParentCell();
-	if (!cell) {
-		return false;
-	}
-
-	auto world = cell->GetbhkWorld();
-	if (!world) {
-		return false;
-	}
-
-	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
-
-	auto prevSize = activeActor.attackCollisions.size();
-
-	if (!activeActor.attackCollisions.empty()) {
-		activeActor.attackCollisions.erase(std::remove_if(activeActor.attackCollisions.begin(), activeActor.attackCollisions.end(), [a_attackCollision](auto& attackCollision) { return attackCollision == a_attackCollision; }));
-	}
-
-	return prevSize != activeActor.attackCollisions.size();
-}
-
-bool PrecisionHandler::RemoveAttackCollision_Impl(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
-{
-	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
-		return false;
-	}
-
-	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
-
-	auto prevSize = activeActor.attackCollisions.size();
-
-	if (!activeActor.attackCollisions.empty()) {
-		if (a_collisionDefinition.ID) {  // remove all matching ID
-			activeActor.attackCollisions.erase(std::remove_if(activeActor.attackCollisions.begin(), activeActor.attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return !attackCollision || attackCollision->ID == a_collisionDefinition.ID; }));
-		} else {  // remove the first matching the node name
-			auto search = std::find_if(activeActor.attackCollisions.begin(), activeActor.attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return !attackCollision || attackCollision->nodeName == a_collisionDefinition.nodeName; });
-			if (search != activeActor.attackCollisions.end()) {
-				activeActor.attackCollisions.erase(search);
-			} else {
-				logger::error("Could not find an attack collision to remove: {}", a_collisionDefinition.nodeName);
-			}
-		}
-	}
-
-	return prevSize != activeActor.attackCollisions.size();
-}
-
-bool PrecisionHandler::RemoveAllAttackCollisions_Impl(RE::ActorHandle a_actorHandle)
-{
-	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
-		return false;
-	}
-
-	auto actor = a_actorHandle.get().get();
-	if (!actor) {
-		return false;
-	}
-
-	auto cell = actor->GetParentCell();
-	if (!cell) {
-		return false;
-	}
-
-	auto world = cell->GetbhkWorld();
-	if (!world) {
-		return false;
-	}
-
-	return _actorsWithAttackCollisions.erase(a_actorHandle) > 0;
-}
-
-void PrecisionHandler::RemoveActor_Impl(RE::ActorHandle a_actorHandle)
-{
-	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
-		return;
-	}
-
-	_actorsWithAttackCollisions.erase(a_actorHandle);
-}
-
-std::shared_ptr<AttackCollision> PrecisionHandler::GetAttackCollision_Impl(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const
-{
-	if (!a_actorHandle || !a_node) {
-		return nullptr;
-	}
-
-	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
-	if (search != _actorsWithAttackCollisions.end()) {
-		auto& attackCollisions = search->second.attackCollisions;
-
-		auto it = std::find_if(attackCollisions.begin(), attackCollisions.end(), [a_node](auto& attackCollision) { return attackCollision->collisionNode.get() == a_node; });
-		if (it != attackCollisions.end()) {
-			return *it;
-		}
-	}
-
-	return nullptr;
-}
-
-std::shared_ptr<AttackCollision> PrecisionHandler::GetAttackCollision_Impl(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const
-{
-	if (!a_actorHandle) {
-		return nullptr;
-	}
-
-	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
-	if (search != _actorsWithAttackCollisions.end()) {
-		auto& attackCollisions = search->second.attackCollisions;
-
-		auto it = std::find_if(attackCollisions.begin(), attackCollisions.end(), [a_nodeName](auto& attackCollision) { return attackCollision->nodeName == a_nodeName; });
-		if (it != attackCollisions.end()) {
-			return *it;
-		}
-	}
-
-	return nullptr;
 }
 
 RE::NiPoint3 PrecisionHandler::CalculateHitImpulse(RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, float a_impulseMult, bool a_bIsActiveRagdoll)
@@ -542,6 +389,12 @@ RE::NiPoint3 PrecisionHandler::CalculateHitImpulse(RE::hkpRigidBody* a_rigidBody
 		}
 	}
 
+	float globalTimeMultiplier = *g_globalTimeMultiplier;
+	
+	if (globalTimeMultiplier <= 0.f) {
+		globalTimeMultiplier = 1.f;
+	}
+	
 	impulseSpeed = fmin(impulseSpeed, (Settings::fHitImpulseMaxVelocity / *g_globalTimeMultiplier));  // limit the imparted velocity to some reasonable value
 	impulse *= impulseSpeed * *g_worldScale * mass;                                                   // This impulse will give the object the exact velocity it is hit with
 	impulse *= impulseStrength;                                                                       // Scale the velocity as we see fit
@@ -559,7 +412,7 @@ void PrecisionHandler::RemoveActor(RE::ActorHandle a_actorHandle)
 {
 	WriteLocker locker(attackCollisionsLock);
 
-	RemoveActor_Impl(a_actorHandle);
+	_actorsWithAttackCollisions.erase(a_actorHandle);
 }
 
 void PrecisionHandler::StartCollision(RE::ActorHandle a_actorHandle, uint32_t a_activeGraphIdx)
@@ -572,50 +425,125 @@ void PrecisionHandler::StartCollision(RE::ActorHandle a_actorHandle, uint32_t a_
 bool PrecisionHandler::AddAttack(RE::ActorHandle a_actorHandle, const AttackDefinition& a_attackDefinition)
 {
 	WriteLocker locker(attackCollisionsLock);
+	
+	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
 
-	return AddAttack_Impl(a_actorHandle, a_attackDefinition);
+	for (auto& collisionDef : a_attackDefinition.collisions) {
+		activeActor.AddAttackCollision(a_actorHandle, collisionDef);
+	}
+
+	return true;
 }
 
-bool PrecisionHandler::AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
+void PrecisionHandler::AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
 {
 	WriteLocker locker(attackCollisionsLock);
 
-	return AddAttackCollision_Impl(a_actorHandle, a_collisionDefinition);
+	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
+
+	activeActor.AddAttackCollision(a_actorHandle, a_collisionDefinition);
 }
 
 bool PrecisionHandler::RemoveAttackCollision(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision)
 {
 	WriteLocker locker(attackCollisionsLock);
 
-	return RemoveAttackCollision_Impl(a_actorHandle, a_attackCollision);
+	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
+		return false;
+	}
+
+	auto actor = a_actorHandle.get().get();
+	if (!actor) {
+		return false;
+	}
+
+	auto cell = actor->GetParentCell();
+	if (!cell) {
+		return false;
+	}
+
+	auto world = cell->GetbhkWorld();
+	if (!world) {
+		return false;
+	}
+
+	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
+
+	return activeActor.RemoveAttackCollision(a_actorHandle, a_attackCollision);
 }
 
 bool PrecisionHandler::RemoveAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
 {
 	WriteLocker locker(attackCollisionsLock);
 
-	return RemoveAttackCollision_Impl(a_actorHandle, a_collisionDefinition);
+	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
+		return false;
+	}
+
+	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
+
+	return activeActor.RemoveAttackCollision(a_actorHandle, a_collisionDefinition);
 }
 
 bool PrecisionHandler::RemoveAllAttackCollisions(RE::ActorHandle a_actorHandle)
 {
 	WriteLocker locker(attackCollisionsLock);
 
-	return RemoveAllAttackCollisions_Impl(a_actorHandle);
+	if (!_actorsWithAttackCollisions.contains(a_actorHandle)) {
+		return false;
+	}
+
+	auto actor = a_actorHandle.get().get();
+	if (!actor) {
+		return false;
+	}
+
+	auto cell = actor->GetParentCell();
+	if (!cell) {
+		return false;
+	}
+
+	auto world = cell->GetbhkWorld();
+	if (!world) {
+		return false;
+	}
+
+	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
+	activeActor.RemoveAllAttackCollisions(a_actorHandle);
+
+	return _actorsWithAttackCollisions.erase(a_actorHandle) > 0;
 }
 
 std::shared_ptr<AttackCollision> PrecisionHandler::GetAttackCollision(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const
 {
 	ReadLocker locker(attackCollisionsLock);
 
-	return GetAttackCollision_Impl(a_actorHandle, a_node);
+	if (!a_actorHandle || !a_node) {
+		return nullptr;
+	}
+
+	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+	if (search != _actorsWithAttackCollisions.end()) {
+		return search->second.GetAttackCollision(a_actorHandle, a_node);
+	}
+
+	return nullptr;
 }
 
 std::shared_ptr<AttackCollision> PrecisionHandler::GetAttackCollision(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const
 {
 	ReadLocker locker(attackCollisionsLock);
 
-	return GetAttackCollision_Impl(a_actorHandle, a_nodeName);
+	if (!a_actorHandle) {
+		return nullptr;
+	}
+
+	auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+	if (search != _actorsWithAttackCollisions.end()) {
+		return search->second.GetAttackCollision(a_actorHandle, a_nodeName);
+	}
+
+	return nullptr;
 }
 
 bool PrecisionHandler::HasActor(RE::ActorHandle a_actorHandle) const
@@ -659,6 +587,13 @@ bool PrecisionHandler::HasStartedPrecisionCollision(RE::ActorHandle a_actorHandl
 	}
 
 	return false;
+}
+
+bool PrecisionHandler::HasHitstop(RE::ActorHandle a_actorHandle) const
+{
+	ReadLocker locker(activeHitstopsLock);
+
+	return activeHitstops.contains(a_actorHandle);
 }
 
 void PrecisionHandler::SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle)
@@ -1269,22 +1204,29 @@ float PrecisionHandler::GetAttackCollisionCapsuleLength(RE::ActorHandle a_actorH
 	float length = 0.f;
 
 	if (a_actorHandle) {
-		auto search = _actorsWithAttackCollisions.find(a_actorHandle);
-		if (search != _actorsWithAttackCollisions.end() && search->second.attackCollisions.size() > 0) {  // actor has at least one active collision
-			auto& attackCollisions = search->second.attackCollisions;
+		{
+			ReadLocker locker(attackCollisionsLock);
 
-			for (auto& attackCollision : attackCollisions) {
-				if (a_collisionType == RequestedAttackCollisionType::LeftWeapon && attackCollision->nodeName != "SHIELD"sv) {
-					continue;
-				} else if (a_collisionType == RequestedAttackCollisionType::RightWeapon && attackCollision->nodeName != "WEAPON"sv) {
-					continue;
-				}
-				
-				if (attackCollision->capsuleLength > length) {
-					length = attackCollision->capsuleLength;
-				}
+			auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+			
+			if (search != _actorsWithAttackCollisions.end() && !search->second.IsEmpty()) {  // actor has at least one active collision
+				search->second.ForEachAttackCollision([&](std::shared_ptr<AttackCollision> attackCollision) {
+					if (a_collisionType == RequestedAttackCollisionType::LeftWeapon && attackCollision->nodeName != "SHIELD"sv) {
+						return;
+					} else if (a_collisionType == RequestedAttackCollisionType::RightWeapon && attackCollision->nodeName != "WEAPON"sv) {
+						return;
+					}
+
+					if (attackCollision->capsuleLength > length) {
+						length = attackCollision->capsuleLength;
+					}
+				});
+
+				return length;
 			}
-		} else if (a_collisionType != RequestedAttackCollisionType::Current) {  // actor has no active collisions, calculate a default capsule length
+		}
+		
+		if (a_collisionType != RequestedAttackCollisionType::Current) {  // actor has no active collisions, calculate a default capsule length
 			auto actor = a_actorHandle.get();
 			if (actor) {
 				RE::InventoryEntryData* attackingWeapon = nullptr;

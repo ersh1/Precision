@@ -72,8 +72,8 @@ struct Settings
 	static inline float fWeaponReachMult = 85.f;
 	static inline float fWeaponLengthMult = 1.2f;
 	static inline float fWeaponCapsuleRadius = 12.f;
-	static inline float fDefaultCollisionLifetime = 0.25f;
-	static inline float fDefaultCollisionLifetimePowerAttackMult = 1.6f;
+	static inline float fDefaultCollisionLifetime = 0.3f;
+	static inline float fDefaultCollisionLifetimePowerAttackMult = 1.8f;
 	static inline float fHitSameRefCooldown = 0.10f;
 	static inline float fFirstPersonPlayerWeaponReachMult = 1.f;
 	static inline float fFirstPersonPlayerCapsuleRadiusMult = 1.5f;
@@ -175,7 +175,7 @@ struct Settings
 	static inline float fGetUpBlendTime = 0.2f;
 	static inline bool bConvertHingeConstraintsToRagdollConstraints = true;
 	static inline bool bLoosenRagdollContraintsToMatchPose = true;
-	static inline bool bDoBlending = true;
+	static inline bool bDoBlending = false;
 	static inline bool bBlendWhenGettingUp = false;
 	static inline bool bForceAnimPose = false;
 	static inline bool bForceRagdollPose = false;
@@ -199,6 +199,8 @@ struct Settings
 	static inline uint32_t iWaterSplashCooldownMs = 50;
 
 	// Non-MCM
+	static inline bool bDisableMod = false;
+
 	static inline uint32_t iPrecisionLayerIndex = 56;
 	static inline uint64_t iPrecisionLayerBitfield = 0x53343561B7FFF;  // same as L_WEAPON layer
 	//static inline int64_t iPrecisionLayerBitfield = 0x1053343561B7FFF;  // same as L_WEAPON layer, but + self-collision (layer 56)

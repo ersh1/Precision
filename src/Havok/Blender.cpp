@@ -11,6 +11,9 @@ float Blender::Curve::GetBlendValueAtTime(float a_time)
 {
 	// Linear by default
 	// y = (1/d)*t
+	if (duration == 0.f) {
+		return 1.f;
+	}
 	return std::clamp(a_time / duration, 0.f, 1.f);
 }
 

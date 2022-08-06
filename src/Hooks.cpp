@@ -31,7 +31,7 @@ namespace Hooks
 
 	bool ActorHasAttackCollision(const RE::ActorHandle a_actorHandle)
 	{
-		return Settings::bAttackCollisionsEnabled && PrecisionHandler::GetSingleton()->HasActor(a_actorHandle);
+		return Settings::bAttackCollisionsEnabled && !Settings::bDisableMod && PrecisionHandler::GetSingleton()->HasActor(a_actorHandle);
 	}
 
 	void UpdateHooks::Nullsub()
@@ -45,7 +45,7 @@ namespace Hooks
 	void UpdateHooks::UpdateAnimationInternal(RE::Actor* a_this, float a_deltaTime)
 	{
 		if (Settings::bEnableHitstop) {
-			a_deltaTime = PrecisionHandler::GetHitstop(a_this->GetHandle(), a_deltaTime, true);
+			a_deltaTime = PrecisionHandler::GetSingleton()->GetHitstop(a_this->GetHandle(), a_deltaTime, true);
 		}
 
 		_UpdateAnimationInternal(a_this, a_deltaTime);
@@ -54,7 +54,7 @@ namespace Hooks
 	void UpdateHooks::ApplyMovement(RE::Actor* a_this, float a_deltaTime)
 	{
 		if (Settings::bEnableHitstop) {
-			a_deltaTime = PrecisionHandler::GetHitstop(a_this->GetHandle(), a_deltaTime, false);
+			a_deltaTime = PrecisionHandler::GetSingleton()->GetHitstop(a_this->GetHandle(), a_deltaTime, false);
 		}
 
 		_ApplyMovement(a_this, a_deltaTime);
@@ -63,7 +63,7 @@ namespace Hooks
 	void UpdateHooks::PlayerCharacter_UpdateAnimation(RE::PlayerCharacter* a_this, float a_deltaTime)
 	{
 		if (Settings::bEnableHitstop) {
-			a_deltaTime = PrecisionHandler::GetHitstop(a_this->GetHandle(), a_deltaTime, true);
+			a_deltaTime = PrecisionHandler::GetSingleton()->GetHitstop(a_this->GetHandle(), a_deltaTime, true);
 		}
 
 		_PlayerCharacter_UpdateAnimation(a_this, a_deltaTime);
@@ -71,7 +71,7 @@ namespace Hooks
 
 	RE::Actor* AttackHooks::Func1(RE::Actor* a_this)
 	{
-		if (!Settings::bAttackCollisionsEnabled || !PrecisionHandler::GetSingleton()->HasActor(a_this->GetHandle())) {
+		if (!Settings::bAttackCollisionsEnabled || Settings::bDisableMod || !PrecisionHandler::GetSingleton()->HasActor(a_this->GetHandle())) {
 			return _Func1(a_this);
 		}
 
@@ -80,7 +80,7 @@ namespace Hooks
 
 	RE::TESObjectREFR* AttackHooks::Func2(RE::Actor* a_this)
 	{
-		if (!Settings::bAttackCollisionsEnabled || !PrecisionHandler::GetSingleton()->HasActor(a_this->GetHandle())) {
+		if (!Settings::bAttackCollisionsEnabled || Settings::bDisableMod || !PrecisionHandler::GetSingleton()->HasActor(a_this->GetHandle())) {
 			return _Func2(a_this);
 		}
 
@@ -351,8 +351,8 @@ namespace Hooks
 				bool bIsHittableCharController = hittableCharControllerGroups.size() > 0 && hittableCharControllerGroups.contains(collisionGroup);
 				bool bIsRagdollCollision = ragdollCollisionGroups.size() > 0 && ragdollCollisionGroups.contains(collisionGroup);
 
-				bool bShouldAddToWorld = actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
-				bool bShouldRemoveFromWorld = actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
+				bool bShouldAddToWorld = !Settings::bDisableMod && actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
+				bool bShouldRemoveFromWorld = Settings::bDisableMod || actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
 
 				bool bIsAddedToWorld = IsAddedToWorld(actorHandle);
 				auto& activeActors = PrecisionHandler::activeActors;
@@ -697,13 +697,6 @@ namespace Hooks
 	{
 		if (!a_actorHandle) {
 			return false;
-		}
-
-		if (a_actorHandle.native_handle() == 0x100000) {
-			// if player, check if racemenu is open
-			if (RE::UI::GetSingleton()->IsMenuOpen(RE::RaceSexMenu::MENU_NAME)) {
-				return false;
-			}
 		}
 			
 		RE::Actor* actor = a_actorHandle.get().get();
@@ -1060,8 +1053,12 @@ namespace Hooks
 			}
 		}
 
-		constexpr float div = 1.f / 60.f;
-		float deltaTimeMult = div / *g_deltaTime;
+		float deltaTimeMult = 1.f;		
+		float deltaTime = *g_deltaTime;
+		if (deltaTime > 0.f) {  // avoid division by zero
+			constexpr float div = 1.f / 60.f;
+			deltaTimeMult = div / *g_deltaTime;
+		}		
 
 		if (rigidBodyHeader && rigidBodyHeader->onFraction > 0.f && rigidBodyHeader->numData > 0) {
 			RE::hkaKeyFrameHierarchyUtility::ControlData* data = (RE::hkaKeyFrameHierarchyUtility::ControlData*)(Track_getData(a_generatorOutput, *rigidBodyHeader));
@@ -1398,6 +1395,10 @@ namespace Hooks
 		auto callbacksResult = PrecisionHandler::GetSingleton()->RunCollisionFilterComparisonCallbacks(a_collisionFilter, a_filterInfoA, a_filterInfoB);
 		if (callbacksResult != CollisionFilterComparisonResult::Continue) {
 			return callbacksResult;
+		}
+
+		if (Settings::bDisableMod) {
+			return CollisionFilterComparisonResult::Continue;
 		}
 
 		CollisionLayer layerA = static_cast<CollisionLayer>(a_filterInfoA & 0x7f);

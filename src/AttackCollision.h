@@ -51,6 +51,16 @@ struct AttackCollisions
 
 	void Update(float a_deltaTime);
 
+	[[nodiscard]] bool IsEmpty() const;
+	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const;
+	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const;
+	void AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
+	[[nodiscard]] bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
+	[[nodiscard]] bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision);
+	bool RemoveAllAttackCollisions(RE::ActorHandle a_actorHandle);
+
+	void ForEachAttackCollision(std::function<void(std::shared_ptr<AttackCollision>)> a_func) const;
+
 	bool HasHitRef(RE::ObjectRefHandle a_handle) const;
 	void AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearHitRefs();
@@ -68,9 +78,17 @@ struct AttackCollisions
 	std::optional<uint32_t> ignoreVanillaAttackEvents;
 	bool bStartedWithWeaponSwing = false;
 	bool bStartedWithWPNSwingUnarmed = false;
-	std::vector<std::shared_ptr<AttackCollision>> attackCollisions{};
+	
 
 private:
+	using Lock = std::shared_mutex;
+	using ReadLocker = std::shared_lock<Lock>;
+	using WriteLocker = std::unique_lock<Lock>;
+
+	mutable Lock lock;
+
+	std::vector<std::shared_ptr<AttackCollision>> _attackCollisions{};
+	
 	// Hit refs shared by collisions with assigned IDs
 	std::unordered_map<uint8_t, HitRefs> _IDHitRefs{};
 

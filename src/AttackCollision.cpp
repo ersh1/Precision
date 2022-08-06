@@ -64,18 +64,28 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 
 			lifetime = a_collisionDefinition.duration;
 			if (a_collisionDefinition.duration) {
+				bool bIsSneaking = actor->IsSneaking();
+
 				if (lifetime == 0) {
 					lifetime = Settings::fDefaultCollisionLifetime;
-					if (auto& attackData = Actor_GetAttackData(actor.get())) {
-						bool bPowerAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
-						if (bPowerAttack) {
-							*lifetime *= Settings::fDefaultCollisionLifetimePowerAttackMult;
+					bool bPowerOrSneakAttack = bIsSneaking;
+					if (!bPowerOrSneakAttack) {
+						if (auto& attackData = Actor_GetAttackData(actor.get())) {
+							bPowerOrSneakAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
+							
 						}
 					}
+					if (bPowerOrSneakAttack) {
+						*lifetime *= Settings::fDefaultCollisionLifetimePowerAttackMult;
+					}
+					
 				}
 
 				float weaponSpeedMult = 1.f;
 				actor->GetGraphVariableFloat("weaponSpeedMult"sv, weaponSpeedMult);
+				if (weaponSpeedMult == 0.f) {
+					weaponSpeedMult = 1.f;
+				}
 				*lifetime *= (1.f / weaponSpeedMult);
 
 				// really hacky fix for a weird issue
@@ -269,7 +279,11 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		if (a_collisionDefinition.capsuleLength) {
 			float length = std::fmax(vertexA.GetDistance3(vertexB), radius);
 			float forcedLength = *a_collisionDefinition.capsuleLength * *g_worldScale;
-			float mult = forcedLength / length;
+			float mult = 1.f;
+			
+			if (length > 0.f) {
+				mult = forcedLength / length;
+			}
 
 			vertexB = vertexB * mult;
 		}
@@ -521,7 +535,7 @@ bool AttackCollision::Update(float a_deltaTime)
 
 	lastUpdate = *g_durationOfApplicationRunTimeMS;
 
-	a_deltaTime = PrecisionHandler::GetHitstop(actorHandle, a_deltaTime, false);
+	a_deltaTime = PrecisionHandler::GetSingleton()->GetHitstop(actorHandle, a_deltaTime, false);
 
 	_hitRefs.Update(a_deltaTime);
 
@@ -556,20 +570,22 @@ bool AttackCollision::Update(float a_deltaTime)
 				float dot = upVector.Dot(capsule.a);
 				float dot2 = upVector.Dot(line);
 
-				RE::NiPoint3 intersection = capsule.a + (line * ((waterHeight - dot) / dot2));
+				if (dot2 != 0.f) {
+					RE::NiPoint3 intersection = capsule.a + (line * ((waterHeight - dot) / dot2));
 
-				//RE::BSSoundHandle soundHandle{};
-				//auto audioManager = RE::BSAudioManager::GetSingleton();
-				//audioManager->BuildSoundDataFromEditorID(soundHandle, "CWaterSmall", 17);
-				//if (soundHandle.IsValid()) {
-				//	BSSoundHandle_SetPosition(&soundHandle, intersection.x, intersection.y, intersection.z);
-				//	//soundHandle.SetPosition(intersection);
-				//	soundHandle.Play();
-				//}
-				//RE::BSTempEffectParticle::Spawn(cell, 1.0, "Effects/waterSplash.NIF", RE::NiMatrix3(), intersection, 0.75f, 7, 0);
+					//RE::BSSoundHandle soundHandle{};
+					//auto audioManager = RE::BSAudioManager::GetSingleton();
+					//audioManager->BuildSoundDataFromEditorID(soundHandle, "CWaterSmall", 17);
+					//if (soundHandle.IsValid()) {
+					//	BSSoundHandle_SetPosition(&soundHandle, intersection.x, intersection.y, intersection.z);
+					//	//soundHandle.SetPosition(intersection);
+					//	soundHandle.Play();
+					//}
+					//RE::BSTempEffectParticle::Spawn(cell, 1.0, "Effects/waterSplash.NIF", RE::NiMatrix3(), intersection, 0.75f, 7, 0);
 
-				PlayWaterImpact(21.f, intersection);  // medium impact
-				lastSplashUpdate = lastUpdate;
+					PlayWaterImpact(21.f, intersection);  // medium impact
+					lastSplashUpdate = lastUpdate;
+				}
 			}
 		}
 	}
@@ -586,15 +602,121 @@ bool AttackCollision::Update(float a_deltaTime)
 
 void AttackCollisions::Update(float a_deltaTime)
 {
+	{
+		WriteLocker locker(lock);
+
+		for (auto it = _attackCollisions.begin(); it != _attackCollisions.end();) {
+			auto& collision = *it;
+			if (!collision->Update(a_deltaTime)) {
+				it = _attackCollisions.erase(it);
+			} else {
+				++it;
+			}
+			
+		}
+	}	
+
 	// update and remove expired entries
-	auto it = _IDHitRefs.begin();
-	while (it != _IDHitRefs.end()) {
+	for (auto it = _IDHitRefs.begin(); it != _IDHitRefs.end();) {
 		it->second.Update(a_deltaTime);
 		if (it->second.IsEmpty()) {
 			it = _IDHitRefs.erase(it);
 		} else {
 			++it;
 		}
+	}
+}
+
+bool AttackCollisions::IsEmpty() const
+{
+	ReadLocker locker(lock);
+	
+	return _attackCollisions.empty();
+}
+
+std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const
+{
+	ReadLocker locker(lock);
+	
+	auto it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_node](auto& attackCollision) { return attackCollision->collisionNode.get() == a_node; });
+	if (it != _attackCollisions.end()) {
+		return *it;
+	}
+
+	return nullptr;
+}
+
+std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const
+{
+	ReadLocker locker(lock);
+	
+	auto it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_nodeName](auto& attackCollision) { return attackCollision->nodeName == a_nodeName; });
+	if (it != _attackCollisions.end()) {
+		return *it;
+	}
+
+	return nullptr;
+}
+
+void AttackCollisions::AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
+{
+	WriteLocker locker(lock);
+	
+	_attackCollisions.emplace_back(std::make_shared<AttackCollision>(a_actorHandle, a_collisionDefinition));
+}
+
+bool AttackCollisions::RemoveAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition)
+{
+	WriteLocker locker(lock);
+	
+	auto prevSize = _attackCollisions.size();
+
+	if (!_attackCollisions.empty()) {
+		if (a_collisionDefinition.ID) {  // remove all matching ID
+			_attackCollisions.erase(std::remove_if(_attackCollisions.begin(), _attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return !attackCollision || attackCollision->ID == a_collisionDefinition.ID; }));
+		} else {  // remove the first matching the node name
+			auto search = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return !attackCollision || attackCollision->nodeName == a_collisionDefinition.nodeName; });
+			if (search != _attackCollisions.end()) {
+				_attackCollisions.erase(search);
+			} else {
+				logger::error("Could not find an attack collision to remove: {}", a_collisionDefinition.nodeName);
+			}
+		}
+	}
+
+	return prevSize != _attackCollisions.size();
+}
+
+bool AttackCollisions::RemoveAttackCollision(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision)
+{
+	WriteLocker locker(lock);
+	
+	auto prevSize = _attackCollisions.size();
+
+	if (!_attackCollisions.empty()) {
+		_attackCollisions.erase(std::remove_if(_attackCollisions.begin(), _attackCollisions.end(), [a_attackCollision](auto& attackCollision) { return attackCollision == a_attackCollision; }));
+	}
+
+	return prevSize != _attackCollisions.size();
+}
+
+bool AttackCollisions::RemoveAllAttackCollisions(RE::ActorHandle a_actorHandle)
+{
+	WriteLocker locker(lock);
+
+	auto prevSize = _attackCollisions.size();
+	
+	_attackCollisions.clear();
+
+	return prevSize != _attackCollisions.size();
+}
+
+void AttackCollisions::ForEachAttackCollision(std::function<void(std::shared_ptr<AttackCollision>)> a_func) const
+{
+	ReadLocker locker(lock);
+
+	for (auto& attackCollision : _attackCollisions) {
+		a_func(attackCollision);
 	}
 }
 

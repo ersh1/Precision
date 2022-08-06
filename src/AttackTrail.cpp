@@ -110,7 +110,7 @@ void AttackTrail::Update(float a_deltaTime)
 							}
 
 							// add new segment(s)
-							if (!bExpired) {
+							if (!bExpired && segmentsToAdd > 0.f) {
 								auto p3_it = trailHistory.rbegin();
 								auto p2_it = p3_it + 1;
 								auto p1_it = p2_it + 1;
