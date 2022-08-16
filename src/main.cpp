@@ -25,8 +25,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 		break;
 	case SKSE::MessagingInterface::kPostLoadGame:
 	case SKSE::MessagingInterface::kNewGame:
-		PrecisionHandler::GetSingleton()->OnPostLoadGame();
 		PrecisionHandler::AddPlayerSink();
+		PrecisionHandler::GetSingleton()->OnPostLoadGame();
 		Settings::OnPostLoadGame();
 		break;
 	}
@@ -127,6 +127,8 @@ extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::Interfa
 
 	switch (a_interfaceVersion) {
 	case PRECISION_API::InterfaceVersion::V1:
+		[[fallthrough]];
+	case PRECISION_API::InterfaceVersion::V2 :
 		logger::info("Precision::RequestPluginAPI returned the API singleton");
 		return static_cast<void*>(api);
 	}

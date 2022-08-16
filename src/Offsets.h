@@ -13,6 +13,8 @@ static float* g_worldScale = (float*)RELOCATION_ID(231896, 188105).address();
 static float* g_worldScaleInverse = (float*)RELOCATION_ID(230692, 187407).address();
 static DWORD* g_dwTlsIndex = (DWORD*)RELOCATION_ID(520865, 407383).address();  // 2F50B74, 2FEB6F4
 
+static RE::BSRenderManager* g_renderManager = (RE::BSRenderManager*)RELOCATION_ID(524907, 411393).address();
+
 static RE::BGSAttackData** g_defaultAttackData = (RE::BGSAttackData**)RELOCATION_ID(515609, 401780).address();  // 2F07FC0, 2FA26D0
 
 static float* g_currentCameraShakeStrength = (float*)RELOCATION_ID(516444, 402622).address();  // 2F251E0, 2FBF5D0
@@ -267,5 +269,23 @@ static REL::Relocation<tPlayWaterImpact> PlayWaterImpact{ RELOCATION_ID(31297, 3
 typedef bool (*tBSSoundHandle_SetPosition)(RE::BSSoundHandle* a_this, float a_x, float a_y, float a_z);
 static REL::Relocation<tBSSoundHandle_SetPosition> BSSoundHandle_SetPosition{ RE::Offset::BSSoundHandle::SetPosition };
 
+typedef RE::NiAVObject*(__fastcall* tNiAVObject_LookupBoneNodeByName)(RE::NiAVObject* a_this, const RE::BSFixedString& a_name, bool a3);
+static REL::Relocation<tNiAVObject_LookupBoneNodeByName> NiAVObject_LookupBoneNodeByName{ RELOCATION_ID(74481, 76207) };
+
 typedef void (*tApplyPerkEntryPoint)(RE::BGSEntryPoint::ENTRY_POINT a_entryPoint, RE::Actor* a_actor, RE::TESBoundObject* a_object, float& a_outResult);
 static REL::Relocation<tApplyPerkEntryPoint> ApplyPerkEntryPoint{ RELOCATION_ID(23073, 23526) };  // 32ECE0, 3444C0
+
+typedef RE::MagicItem* (*tGetEnchantment)(RE::InventoryEntryData* a_item);
+static REL::Relocation<tGetEnchantment> GetEnchantment{ RELOCATION_ID(15788, 16026) };  // 1D7F10, 1E3830
+
+typedef RE::MagicItem* (*tGetPoison)(RE::InventoryEntryData* a_item);
+static REL::Relocation<tGetPoison> GetPoison{ RELOCATION_ID(15761, 15999) };  // 1D69C0, 1E2250
+
+typedef RE::ActorValue (*tGetActorValueForCost)(RE::MagicItem* a_item, bool a_bIsRightHand);
+static REL::Relocation<tGetActorValueForCost> GetActorValueForCost{ RELOCATION_ID(33817, 34609) };  // 556780, 572200
+
+typedef void (*tNiBound_Combine)(RE::NiBound& a_this, const RE::NiBound& a_other);
+static REL::Relocation<tNiBound_Combine> NiBound_Combine{ RELOCATION_ID(69588, 70973) };  // C73920, C9C220
+
+typedef float (*tActor_GetReach)(RE::Actor* a_this);
+static REL::Relocation<tActor_GetReach> Actor_GetReach{ RELOCATION_ID(37588, 38538) };  // 623F10, 649520

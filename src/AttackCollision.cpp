@@ -10,21 +10,28 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 	lastUpdate = *g_durationOfApplicationRunTimeMS;
 
 	auto actor = a_actorHandle.get();
-	if (actor) {
+	if (actor && actor->currentProcess) {
 		auto cell = actor->GetParentCell();
 		if (cell) {
 			if (RE::NiPointer<RE::NiNode> newNode = RE::NiPointer<RE::NiNode>(AddCollision(actorHandle, a_collisionDefinition))) {
 				bool bIsWeapon = a_collisionDefinition.nodeName == "WEAPON"sv || a_collisionDefinition.nodeName == "SHIELD"sv;
 				if (bIsWeapon) {
+					RE::InventoryEntryData* weaponItem = nullptr;
 					RE::TESForm* equipment = nullptr;
 					RE::TESObjectWEAP* equippedWeapon = nullptr;
 
 					bool bIsBashing = false;
 
-					if (a_collisionDefinition.nodeName == "WEAPON"sv) {
-						equipment = actor->currentProcess->GetEquippedRightHand();
+					bool bIsLeftHand = a_collisionDefinition.nodeName != "WEAPON"sv;
+
+					if (bIsLeftHand) {
+						weaponItem = actor->currentProcess->middleHigh->leftHand;
 					} else {
-						equipment = actor->currentProcess->GetEquippedLeftHand();
+						weaponItem = actor->currentProcess->middleHigh->rightHand;
+					}
+
+					if (weaponItem) {
+						equipment = weaponItem->object;
 					}
 
 					if (!equipment) {
@@ -33,21 +40,29 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 
 					bIsBashing = actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
 
-					if (equipment) {
-						equippedWeapon = equipment->As<RE::TESObjectWEAP>();
-					}
+					bool bShowTrail = Settings::bDisplayTrails && !a_collisionDefinition.bNoTrail && !bIsBashing;
+
+					if (bShowTrail) {
+						if (equipment) {
+							equippedWeapon = equipment->As<RE::TESObjectWEAP>();
+						}
+
+						if (equippedWeapon && equippedWeapon->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee) {
+							bShowTrail = false;
+						}
+					}					
 
 					// get visual weapon length
 					if (newNode->parent && newNode->parent->children.size() > 0) {
 						auto& weaponNode = newNode->parent->children[0];
 						if (weaponNode && weaponNode != newNode) {
-							visualWeaponLength = PrecisionHandler::GetWeaponAttackReach(actorHandle, weaponNode.get(), equippedWeapon, true, false);
+							visualWeaponLength = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
 						}
 					}
 
 					// add trail
-					if (Settings::bDisplayTrails && !a_collisionDefinition.bNoTrail && !bIsBashing) {
-						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, equippedWeapon));
+					if (bShowTrail) {
+						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand));
 					}
 				}
 
@@ -64,21 +79,15 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 
 			lifetime = a_collisionDefinition.duration;
 			if (a_collisionDefinition.duration) {
-				bool bIsSneaking = actor->IsSneaking();
-
 				if (lifetime == 0) {
 					lifetime = Settings::fDefaultCollisionLifetime;
-					bool bPowerOrSneakAttack = bIsSneaking;
-					if (!bPowerOrSneakAttack) {
-						if (auto& attackData = Actor_GetAttackData(actor.get())) {
-							bPowerOrSneakAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
-							
-						}
+					bool bPowerAttack = false;
+					if (auto& attackData = Actor_GetAttackData(actor.get())) {
+						bPowerAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
 					}
-					if (bPowerOrSneakAttack) {
+					if (bPowerAttack) {
 						*lifetime *= Settings::fDefaultCollisionLifetimePowerAttackMult;
 					}
-					
 				}
 
 				float weaponSpeedMult = 1.f;
@@ -91,6 +100,10 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 				// really hacky fix for a weird issue
 				if (*g_deltaTime > 0.011f) {
 					*lifetime += *g_deltaTime;
+				}
+
+				if (a_collisionDefinition.durationMult) {
+					*lifetime *= *a_collisionDefinition.durationMult;
 				}
 			}
 		}
@@ -134,6 +147,7 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		return nullptr;
 	}
 
+	float length = 0.f;
 	float radius = 0.f;
 	RE::hkVector4 vertexA{};
 	RE::hkVector4 vertexB{};
@@ -141,23 +155,12 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 	float havokWorldScale = *g_worldScale;
 	float havokInvWorldScale = *g_worldScaleInverse;
 
-	bool bIsFirstPerson = false;
-	bool bIsPlayer = a_actorHandle.native_handle() == 0x100000;
-	if (bIsPlayer) {
-		RE::BSAnimationGraphManagerPtr graphManager;
-		actor->GetAnimationGraphManager(graphManager);
-		if (graphManager) {
-			bIsFirstPerson = graphManager->activeGraph != 0;
-		}
-	}
-
 	bool bIsWeapon = nodeName == "WEAPON"sv || nodeName == "SHIELD"sv;
-
-	float actorScale = actor->GetScale();
 
 	RE::NiPoint3 tipOffset;
 
 	bool bIsShieldBashing = false;
+	bool bIsBowBashing = false;
 	
 	if (bIsWeapon) {
 		bool bIsBashing = actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
@@ -170,9 +173,19 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		if (bIsBashing) {
 			auto rightHandEquipment = actor->currentProcess->GetEquippedRightHand();
 			auto leftHandEquipment = actor->currentProcess->GetEquippedLeftHand();
+
+			bool bIsBashingWithLeftHand = leftHandEquipment && leftHandEquipment != rightHandEquipment;  // has something else in the left hand so use the left hand node
+			if (!bIsBashingWithLeftHand && rightHandEquipment) {  // check if it's a bow, bows are held in the left hand even if they're technically right hand
+				if (auto rightHandWeapon = rightHandEquipment->As<RE::TESObjectWEAP>()) {
+					if (rightHandWeapon->weaponData.animationType == RE::WEAPON_TYPE::kBow) {
+						bIsBashingWithLeftHand = true;
+						bIsBowBashing = true;
+					}
+				}
+			}
 			
-			if (leftHandEquipment && leftHandEquipment != rightHandEquipment) {  // has something else in the left hand so use the left hand node
-				bIsShieldBashing = leftHandEquipment->IsArmor();
+			if (bIsBashingWithLeftHand) {
+				bIsShieldBashing = leftHandEquipment && leftHandEquipment->IsArmor();
 
 				nodeName = "SHIELD"sv;
 
@@ -187,66 +200,42 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 			}
 		}
 
-		RE::TESForm* equipment = nullptr;
-
-		if (nodeName == "WEAPON"sv) {
-			equipment = actor->currentProcess->GetEquippedRightHand();
-		} else {
-			equipment = actor->currentProcess->GetEquippedLeftHand();
-		}
-
-		RE::TESObjectWEAP* equippedWeapon = nullptr;
-		if (equipment) {
-			equippedWeapon = equipment->As<RE::TESObjectWEAP>();
-		}
-
 		RE::NiAVObject* weaponNode = nullptr;
 		if (node->children.size() > 0 && node->children[0]) {
 			weaponNode = node->children[0].get();
 		}
 
-		float length = PrecisionHandler::GetWeaponAttackReach(a_actorHandle, weaponNode, equippedWeapon, !Settings::bUseWeaponReach, true) * havokWorldScale;
+		// sum up mults
+		float lengthMult = 1.f;
+		float radiusMult = 1.f;
 
-		if (a_collisionDefinition.capsuleLength) {
-			length = *a_collisionDefinition.capsuleLength * havokWorldScale;
+		if (a_collisionDefinition.lengthMult) {
+			lengthMult *= *a_collisionDefinition.lengthMult;
 		}
 
-		if (a_collisionDefinition.capsuleRadius) {
-			radius = *a_collisionDefinition.capsuleRadius * havokWorldScale;
+		if (a_collisionDefinition.radiusMult) {
+			radiusMult *= *a_collisionDefinition.radiusMult;
 		}
-
+		
 		if (a_collisionDefinition.transform) {
-			radius *= a_collisionDefinition.transform->scale;
-			length *= a_collisionDefinition.transform->scale;
+			lengthMult *= a_collisionDefinition.transform->scale;
+			radiusMult *= a_collisionDefinition.transform->scale;
 		}
-
-		radius = Settings::fWeaponCapsuleRadius * havokWorldScale;
-
-
-
-		if (bIsPlayer) {
-			length *= bIsFirstPerson ? Settings::fFirstPersonPlayerWeaponReachMult : Settings::fThirdPersonPlayerWeaponReachMult;
-			radius *= bIsFirstPerson ? Settings::fFirstPersonPlayerCapsuleRadiusMult : Settings::fThirdPersonPlayerCapsuleRadiusMult;
-		}
-
-		if (actor->IsOnMount()) {
-			length *= Settings::fMountedWeaponReachMult;
-			radius *= Settings::fMountedCapsuleRadiusMult;
-		}
-
-		/*length *= actorScale;
-		radius *= actorScale;*/
-
-		if (bIsShieldBashing) {
-			if ( bIsFirstPerson) {  // workaround for unfortunate shield bash FPP animation not really hitting stuff in front of you
-				length *= 2.f;
-			}
+		
+		// calc length and radius
+		length = PrecisionHandler::GetWeaponAttackLength(a_actorHandle, weaponNode, a_collisionDefinition.capsuleLength, lengthMult) * havokWorldScale;
+		radius = PrecisionHandler::GetWeaponAttackRadius(a_actorHandle, a_collisionDefinition.capsuleRadius, radiusMult) * havokWorldScale;
+		
+		// special cases
+		if (bIsShieldBashing || bIsBowBashing) {
 			float halfLength = length * 0.5f;
-			vertexA.quad.m128_f32[0] = -halfLength;
-			vertexB.quad.m128_f32[0] = halfLength;
-			radius = length;
+			vertexA.quad.m128_f32[0] = halfLength;
+			vertexB.quad.m128_f32[0] = -halfLength;
+			if (bIsShieldBashing) {
+				radius = length;
+			}
 		} else {
-			vertexB.quad.m128_f32[0] = length;
+			vertexA.quad.m128_f32[0] = length;
 		}
 
 		if (a_collisionDefinition.bWeaponTip) {
@@ -259,48 +248,27 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 		vertexA = { 0.002939f, 0.003175f, 0.054681f, 0.f };
 		vertexB = { 0.001875f, 0.003175f, 0.054681f, 0.f };
 
-		if (node->collisionObject) {
-			auto collisionObject = static_cast<RE::bhkCollisionObject*>(node->collisionObject.get());
-			auto rigidBody = collisionObject->GetRigidBody();
+		// sum up mults
+		float lengthMult = 1.f;
+		float radiusMult = 1.f;
 
-			if (rigidBody && rigidBody->referencedObject) {
-				RE::hkpRigidBody* hkpRigidBody = static_cast<RE::hkpRigidBody*>(rigidBody->referencedObject.get());
-				const RE::hkpShape* hkpShape = hkpRigidBody->collidable.shape;
-				if (hkpShape->type == RE::hkpShapeType::kCapsule) {
-					auto hkpCapsuleShape = static_cast<const RE::hkpCapsuleShape*>(hkpShape);
-
-					radius = hkpCapsuleShape->radius;
-					vertexA = hkpCapsuleShape->vertexA;
-					vertexB = hkpCapsuleShape->vertexB;
-				}
-			}
+		if (a_collisionDefinition.lengthMult) {
+			lengthMult *= *a_collisionDefinition.lengthMult;
 		}
 
-		if (a_collisionDefinition.capsuleLength) {
-			float length = std::fmax(vertexA.GetDistance3(vertexB), radius);
-			float forcedLength = *a_collisionDefinition.capsuleLength * *g_worldScale;
-			float mult = 1.f;
-			
-			if (length > 0.f) {
-				mult = forcedLength / length;
-			}
-
-			vertexB = vertexB * mult;
-		}
-
-		if (a_collisionDefinition.capsuleRadius) {
-			radius = *a_collisionDefinition.capsuleRadius * havokWorldScale;
+		if (a_collisionDefinition.radiusMult) {
+			radiusMult *= *a_collisionDefinition.radiusMult;
 		}
 
 		if (a_collisionDefinition.transform) {
-			radius *= a_collisionDefinition.transform->scale;
-			vertexA = vertexA * a_collisionDefinition.transform->scale;
-			vertexB = vertexB * a_collisionDefinition.transform->scale;
+			radiusMult *= a_collisionDefinition.transform->scale;
+			lengthMult *= a_collisionDefinition.transform->scale;
 		}
 
-		radius *= actorScale;
-		vertexA = vertexA * actorScale;
-		vertexB = vertexB * actorScale;
+		// calc attack dimensions
+		if (!PrecisionHandler::GetNodeAttackDimensions(a_actorHandle, node, a_collisionDefinition.capsuleLength, lengthMult, a_collisionDefinition.capsuleRadius, radiusMult, vertexA, vertexB, radius)) {
+			return nullptr;
+		}		
 	} else {
 		return nullptr;
 	}
@@ -364,12 +332,6 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 
 	if (a_collisionDefinition.transform) {
 		newNode->local = *a_collisionDefinition.transform;
-
-		if (bIsShieldBashing) {  // swap the axis when shield bashing
-			RE::NiPoint3 vec = newNode->local.translate;
-			newNode->local.translate.z = vec.x;
-			newNode->local.translate.x = vec.z;
-		}
 	}
 
 	if (a_collisionDefinition.bWeaponTip) {

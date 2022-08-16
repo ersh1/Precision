@@ -497,6 +497,41 @@ namespace Utils
 		DrawHandler::DrawDebugCapsule(origin, vertexA, vertexB, radius, rotNiMatrix, 0.f, weaponCapsuleColor);
 	}
 
+	bool GetTorsoPos(RE::Actor* a_actor, RE::NiPoint3& point)
+	{
+		if (!a_actor) {
+			return false;
+		}
+
+		RE::TESRace* race = a_actor->race;
+		if (!race) {
+			return false;
+		}
+
+		RE::NiAVObject* object = a_actor->Get3D2();
+		if (!object) {
+			return false;
+		}
+
+		RE::BGSBodyPartData* bodyPartData = race->bodyPartData;
+		if (!bodyPartData) {
+			return false;
+		}
+
+		RE::BGSBodyPart* bodyPart = bodyPartData->parts[RE::BGSBodyPartDefs::LIMB_ENUM::kTorso];
+		if (!bodyPart) {
+			return false;
+		}
+
+		auto node = NiAVObject_LookupBoneNodeByName(object, bodyPart->targetName, true);
+		if (!node) {
+			return false;
+		}
+
+		point = node->world.translate;
+		return true;
+	}
+
 	RE::NiTransform GetLocalTransform(RE::NiAVObject* a_node, const RE::NiTransform& a_worldTransform, bool a_bUseOldParentTransform /*= false*/)
 	{
 		RE::NiPointer<RE::NiNode> parent(a_node->parent);
@@ -531,6 +566,75 @@ namespace Utils
 				}
 			}
 		}
+	}
+
+	void TraverseMeshes(RE::NiAVObject* a_object, std::function<void(RE::BSGeometry*)> a_func)
+	{
+		if (!a_object) {
+			return;
+		}
+
+		// Skip billboards and their children
+		if (a_object->GetRTTI() == (RE::NiRTTI*)RE::NiRTTI_NiBillboardNode.address()) {
+			return;
+		}
+
+		auto geom = a_object->AsGeometry();
+		if (geom) {
+			return a_func(geom);
+		}
+		
+		auto node = a_object->AsNode();
+		if (node) {
+			for (auto& child : node->GetChildren()) {
+				TraverseMeshes(child.get(), a_func);
+			}
+		}
+	}
+
+	RE::NiBound GetMeshBounds(RE::NiAVObject* a_obj)
+	{
+		std::optional<RE::NiBound> ret;
+		TraverseMeshes(a_obj, [&](auto&& a_geometry) {
+			if (ret) {
+				NiBound_Combine(*ret, a_geometry->worldBound);
+			} else {
+				ret = a_geometry->worldBound;
+			}
+		});
+
+		return ret ? *ret : RE::NiBound{};
+	}
+
+	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime)
+	{
+		if (!a_actor) {
+			return false;
+		}
+
+		RE::BSAnimationGraphManagerPtr graphManager = nullptr;
+		a_actor->GetAnimationGraphManager(graphManager);
+		if (graphManager) {
+			if (auto BSgraph = graphManager->graphs[graphManager->activeGraph]) {
+				if (auto graph = BSgraph->behaviorGraph) {
+					auto activeNodes = reinterpret_cast<RE::NodeList**>(&graph->activeNodes);
+					if (activeNodes) {
+						for (auto nodeInfo : **activeNodes) {
+							if (auto nodeClone = nodeInfo.nodeClone) {
+								if (auto clipGenerator = skyrim_cast<RE::hkbClipGenerator*>(nodeClone)) {
+									a_outProjectName = BSgraph->projectName;
+									a_outAnimationName = clipGenerator->animationName;
+									a_outAnimationTime = clipGenerator->localTime;
+									return true;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return false;
 	}
 
 	//http://www.iquilezles.org/www/articles/minispline/minispline.htm

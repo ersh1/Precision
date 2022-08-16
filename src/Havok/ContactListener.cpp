@@ -41,10 +41,6 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		return;  // Every collision we care about involves a Precision layer
 	}
 
-	if (layerA == CollisionLayer::kPrecision && layerB == CollisionLayer::kPrecision) {
-		return;  // Disable weapon-weapon collisions
-	}
-
 	auto hitRigidBody = layerA == CollisionLayer::kPrecision ? rigidBodyB : rigidBodyA;
 	auto hittingRigidBody = hitRigidBody == rigidBodyA ? rigidBodyB : rigidBodyA;
 
@@ -65,6 +61,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	CollisionLayer hitLayer = hitRigidBody == rigidBodyA ? layerA : layerB;
 
 	if (!attacker || attacker->formType != RE::FormType::ActorCharacter) {
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 		return;
 	}
 
@@ -87,10 +84,77 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	RE::Actor* targetActor = target ? target->As<RE::Actor>() : nullptr;
 
 	if (!attackCollision) {
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 		return;
 	}
 
 	RE::NiPoint3 niHitPos = Utils::HkVectorToNiPoint(hkHitPos) * *g_worldScaleInverse;
+
+	RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
+
+	if (pointVelocity.IsEqual(RE::hkVector4())) {  // point velocity is zero
+		auto hittingNode = GetNodeFromCollidable(&hittingRigidBody->collidable);
+		pointVelocity = GetParentNodePointVelocity(hittingNode, hkHitPos);
+	}
+
+	if (pointVelocity.IsEqual(RE::hkVector4())) {  // still zero, skip this collision
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		return;
+	}
+
+	if (layerA == CollisionLayer::kPrecision && layerB == CollisionLayer::kPrecision) {
+		if (precisionHandler->weaponWeaponCollisionCallbacks.size() > 0) {
+			RE::hkpShapeKey* hittingBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx ? 0 : 1);
+			RE::hkpShapeKey* hitBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx);
+			RE::hkpShapeKey hittingBodyShapeKey = hittingBodyShapeKeysPtr ? *hittingBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
+			RE::hkpShapeKey hitBodyShapeKey = hitBodyShapeKeysPtr ? *hitBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
+			
+			auto niSeparatingNormal = Utils::HkVectorToNiPoint(a_event.contactPoint->separatingNormal);
+			RE::NiPoint3 niHitVelocity = Utils::HkVectorToNiPoint(pointVelocity) * *g_worldScaleInverse;
+			PRECISION_API::PrecisionHitData precisionHitData(attackerActor, target, hitRigidBody, hittingRigidBody, niHitPos, niSeparatingNormal, niHitVelocity, hitBodyShapeKey, hittingBodyShapeKey);
+			auto callbackReturns = precisionHandler->RunWeaponWeaponCollisionCallbacks(precisionHitData);
+
+			for (auto& entry : callbackReturns) {
+				if (entry.bIgnoreHit) {
+					// abort hit
+					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+					return;
+				}
+			}
+		} else {
+			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			return;  // Disable weapon-weapon collisions
+		}
+	}
+
+	if (hitLayer == CollisionLayer::kProjectile) {
+		RE::hkVector4 projectileVelocity = hitRigidBody->motion.GetPointVelocity(hkHitPos);
+		if (!projectileVelocity.IsEqual(RE::hkVector4())) {  // projectile velocity is not zero
+			if (precisionHandler->weaponProjectileCollisionCallbacks.size() > 0) {			
+				RE::hkpShapeKey* hittingBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx ? 0 : 1);
+				RE::hkpShapeKey* hitBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx);
+				RE::hkpShapeKey hittingBodyShapeKey = hittingBodyShapeKeysPtr ? *hittingBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
+				RE::hkpShapeKey hitBodyShapeKey = hitBodyShapeKeysPtr ? *hitBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
+
+				auto niSeparatingNormal = Utils::HkVectorToNiPoint(a_event.contactPoint->separatingNormal);
+				RE::NiPoint3 niHitVelocity = Utils::HkVectorToNiPoint(pointVelocity) * *g_worldScaleInverse;
+				PRECISION_API::PrecisionHitData precisionHitData(attackerActor, target, hitRigidBody, hittingRigidBody, niHitPos, niSeparatingNormal, niHitVelocity, hitBodyShapeKey, hittingBodyShapeKey);
+				auto callbackReturns = precisionHandler->RunWeaponProjectileCollisionCallbacks(precisionHitData);
+
+				for (auto& entry : callbackReturns) {
+					if (entry.bIgnoreHit) {
+						// abort hit
+						a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+						return;
+					}
+				}
+			} else {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				return;  // Disable weapon-moving projectile collisions
+			}
+		} 
+	}
+	
 	auto feetPosition = attackerActor->GetPositionZ();
 
 	if (!targetActor) {
@@ -138,9 +202,6 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 							auto& attackData = attackerActor->currentProcess->high->attackData;
 							if (attackData) {
 								if (!Settings::bRecoilPowerAttack && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {  // skip recoil if the attack is a power attack
-									bDoRecoil = false;
-								}
-								if (attackData->data.flags.any(RE::AttackData::AttackFlag::kChargeAttack)) {  // skip recoil if the attack is a left attack (TEMP)
 									bDoRecoil = false;
 								}
 							}
@@ -191,6 +252,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 	}
 
+	// filter out self for whatever reason
+	if (targetActor == attackerActor) {
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		return;
+	}
+
 	if (attackCollision->HasHitRef(target ? target->GetHandle() : RE::ObjectRefHandle())) {
 		// refr has already been recently hit, so disable the contact point and gtfo
 		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
@@ -214,7 +281,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	}
 
 	// while in combat, filter out actors like teammates etc.
-	if (targetActor && attackerActor && attackerActor->IsInCombat()) {
+	if (targetActor && attackerActor && precisionHandler->CheckActorInCombat(attackerHandle)) {
 		// don't let player hit their teammates or summons
 		bool bAttackerIsPlayer = attackerActor->IsPlayerRef();
 		bool bTargetIsPlayer = targetActor->IsPlayerRef();
@@ -248,22 +315,10 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 
 		// don't hit actors that aren't hostile and are in combat already
-		if (Settings::bNoNonHostileAttackCollision && targetActor->IsInCombat() && !targetActor->IsHostileToActor(attackerActor)) {
+		if (Settings::bNoNonHostileAttackCollision && precisionHandler->CheckActorInCombat(targetActor->GetHandle()) && !targetActor->IsHostileToActor(attackerActor)) {
 			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 			return;
 		}
-	}
-
-	RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
-
-	if (pointVelocity.IsEqual(RE::hkVector4())) {  // point velocity is zero
-		auto hittingNode = GetNodeFromCollidable(&hittingRigidBody->collidable);
-		pointVelocity = GetParentNodePointVelocity(hittingNode, hkHitPos);
-	}
-
-	if (pointVelocity.IsEqual(RE::hkVector4())) {  // still zero, skip this collision
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
-		return;
 	}
 
 	// jump iframes
@@ -397,11 +452,5 @@ void ContactListener::CollisionAddedCallback(const RE::hkpCollisionEvent& a_even
 void ContactListener::CollisionRemovedCallback(const RE::hkpCollisionEvent& a_event)
 {
 	a_event;
-	//throw std::logic_error("The method or operation is not implemented.");
-}
-
-void ContactListener::PostSimulationCallback([[maybe_unused]] RE::hkpWorld* a_world)
-{
-	//a_world;
 	//throw std::logic_error("The method or operation is not implemented.");
 }

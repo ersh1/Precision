@@ -10,7 +10,8 @@ namespace PRECISION_API
 	// Available Precision interface versions
 	enum class InterfaceVersion : uint8_t
 	{
-		V1
+		V1,
+		V2
 	};
 
 	// Error types that may be returned by Precision
@@ -54,6 +55,12 @@ namespace PRECISION_API
 		std::vector<PreHitModifier> modifiers;
 	};
 
+	struct WeaponCollisionCallbackReturn
+	{
+		// if set to true, the hit to the weapon owner will be ignored. Otherwise the game will handle the hit normally as if the weapon was the actor's body.
+		bool bIgnoreHit = true;
+	};
+
 	struct PrecisionHitData
 	{
 		PrecisionHitData(RE::Actor* a_attacker, RE::TESObjectREFR* a_target, RE::hkpRigidBody* a_hitRigidBody, RE::hkpRigidBody* a_hittingRigidBody, const RE::NiPoint3& a_hitPos,
@@ -95,6 +102,7 @@ namespace PRECISION_API
 	using PostHitCallback = std::function<void(const PrecisionHitData&, const RE::HitData&)>;
 	using PrePhysicsStepCallback = std::function<void(RE::bhkWorld*)>;
 	using CollisionFilterComparisonCallback = std::function<CollisionFilterComparisonResult(RE::bhkCollisionFilter*, uint32_t, uint32_t)>;
+	using WeaponCollisionCallback = std::function<WeaponCollisionCallbackReturn(const PrecisionHitData&)>;
 
 	// Precision's modder interface
 	class IVPrecision1
@@ -169,6 +177,50 @@ namespace PRECISION_API
 		virtual float GetAttackCollisionCapsuleLength(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType = RequestedAttackCollisionType::Default) const noexcept = 0;
 	};
 
+	class IVPrecision2 : public IVPrecision1
+	{
+	public:
+		/// <summary>
+		/// Adds a callback that will run when two weapons collide.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <param name="a_callback">The callback function</param>
+		/// <returns>OK, AlreadyRegistered</returns>
+		virtual APIResult AddWeaponWeaponCollisionCallback(SKSE::PluginHandle a_myPluginHandle, WeaponCollisionCallback&& a_callback) noexcept = 0;
+
+		/// <summary>
+		/// Removes the callback that will run when two weapons collide.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <returns>OK, NotRegistered</returns>
+		virtual APIResult RemoveWeaponWeaponCollisionCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
+
+		/// <summary>
+		/// Adds a callback that will run when a weapon and a moving projectile collide.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <param name="a_callback">The callback function</param>
+		/// <returns>OK, AlreadyRegistered</returns>
+		virtual APIResult AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a_myPluginHandle, WeaponCollisionCallback&& a_callback) noexcept = 0;
+
+		/// <summary>
+		/// Removes the callback that will run when a weapon and a moving projectile collide.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <returns>OK, NotRegistered</returns>
+		virtual APIResult RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
+		
+		/// <summary>
+		/// Applies impulse.
+		/// </summary>
+		/// <param name="a_refHandle">Actor handle</param>
+		/// <param name="a_rigidBody">Hit rigid body</param>
+		/// <param name="a_hitVelocity">Hit velocity vector</param>
+		/// <param name="a_hitPosition">Hit position</param>
+		/// <param name="a_impulseMult">Impulse strength multiplier</param>
+		virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
+	};
+
 	typedef void* (*_RequestPluginAPI)(const InterfaceVersion interfaceVersion);
 
 	/// <summary>
@@ -177,7 +229,7 @@ namespace PRECISION_API
 	/// </summary>
 	/// <param name="a_interfaceVersion">The interface version to request</param>
 	/// <returns>The pointer to the API singleton, or nullptr if request failed</returns>
-	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V1)
+	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V2)
 	{
 		auto pluginHandle = GetModuleHandleA("Precision.dll");
 		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)GetProcAddress(pluginHandle, "RequestPluginAPI");

@@ -12,13 +12,17 @@ struct CollisionDefinition
 		bool a_bNoRecoil = false,
 		bool a_bNoTrail = false,
 		bool a_bWeaponTip = false,
-		float a_damageMult = 1.f,
+		float a_damageMult = 1.f,		
 		std::optional<float> a_duration = std::nullopt,
+		std::optional<float> a_durationMult = std::nullopt,
+		std::optional<float> a_delay = std::nullopt,
 		std::optional<float> a_capsuleRadius = std::nullopt,
+		std::optional<float> a_radiusMult = std::nullopt,
 		std::optional<float> a_capsuleLength = std::nullopt,
+		std::optional<float> a_lengthMult = std::nullopt,
 		std::optional<RE::NiTransform> a_transform = std::nullopt) :
 		nodeName(a_nodeName),
-		ID(a_ID), bNoRecoil(a_bNoRecoil), bNoTrail(a_bNoTrail), bWeaponTip(a_bWeaponTip), damageMult(a_damageMult), duration(a_duration), capsuleRadius(a_capsuleRadius), capsuleLength(a_capsuleLength), transform(a_transform)
+		ID(a_ID), bNoRecoil(a_bNoRecoil), bNoTrail(a_bNoTrail), bWeaponTip(a_bWeaponTip), damageMult(a_damageMult), duration(a_duration), durationMult(a_durationMult), delay(a_delay), capsuleRadius(a_capsuleRadius), radiusMult(a_radiusMult), capsuleLength(a_capsuleLength), lengthMult(a_lengthMult), transform(a_transform)
 	{}
 
 	std::string nodeName;
@@ -28,8 +32,12 @@ struct CollisionDefinition
 	bool bWeaponTip = false;
 	float damageMult = 1.f;
 	std::optional<float> duration;
+	std::optional<float> durationMult;
+	std::optional<float> delay;
 	std::optional<float> capsuleRadius;
+	std::optional<float> radiusMult;
 	std::optional<float> capsuleLength;
+	std::optional<float> lengthMult;
 	std::optional<RE::NiTransform> transform;
 };
 
@@ -42,6 +50,37 @@ struct AttackDefinition
 	{}
 
 	std::vector<CollisionDefinition> collisions;
+};
+
+struct TrailDefinition
+{
+	TrailDefinition() = default;
+
+	TrailDefinition(int32_t a_priority,
+		std::optional<std::vector<std::string>> a_weaponNames,
+		std::optional<std::vector<std::string>> a_weaponKeywords,
+		std::optional<std::vector<std::string>> a_enchantmentNames,
+		std::optional<std::vector<std::string>> a_effectNames,
+		std::optional<std::vector<std::string>> a_effectKeywords,
+		std::optional<std::vector<RE::TESEffectShader*>> a_effectShaders,
+		std::optional<float> a_lifetimeMult,
+		std::optional<RE::NiColorA> a_baseColorOverride,
+		std::optional<float> a_baseColorScaleMult,
+		std::optional<std::string> a_trailMeshOverride) :
+		priority(a_priority), weaponNames(a_weaponNames), weaponKeywords(a_weaponKeywords), enchantmentNames(a_enchantmentNames), effectNames(a_effectNames), effectKeywords(a_effectKeywords), effectShaders(a_effectShaders), lifetimeMult(a_lifetimeMult), baseColorOverride(a_baseColorOverride), baseColorScaleMult(a_baseColorScaleMult), trailMeshOverride(a_trailMeshOverride)
+	{}
+	
+	int32_t priority;
+	std::optional<std::vector<std::string>> weaponNames;
+	std::optional<std::vector<std::string>> weaponKeywords;
+	std::optional<std::vector<std::string>> enchantmentNames;
+	std::optional<std::vector<std::string>> effectNames;
+	std::optional<std::vector<std::string>> effectKeywords;
+	std::optional<std::vector<RE::TESEffectShader*>> effectShaders;
+	std::optional<float> lifetimeMult;
+	std::optional<RE::NiColorA> baseColorOverride;
+	std::optional<float> baseColorScaleMult;
+	std::optional<std::string> trailMeshOverride;
 };
 
 enum class SweepAttackMode : std::uint32_t
@@ -64,23 +103,22 @@ struct Settings
 
 	// Attack Collisions
 	static inline bool bAttackCollisionsEnabled = true;
-	static inline bool bUseWeaponReach = false;
 	static inline bool bEnableJumpIframes = true;
 	static inline bool bNoPlayerTeammateAttackCollision = true;
 	static inline bool bNoNonHostileAttackCollision = true;
+	static inline float fCombatStateLingerTime = 3.f;
 	static inline bool bDisablePhysicalCollisionOnHit = true;
-	static inline float fWeaponReachMult = 85.f;
 	static inline float fWeaponLengthMult = 1.2f;
 	static inline float fWeaponCapsuleRadius = 12.f;
+	static inline float fMinWeaponLength = 50.f;
 	static inline float fDefaultCollisionLifetime = 0.3f;
 	static inline float fDefaultCollisionLifetimePowerAttackMult = 1.8f;
-	static inline float fHitSameRefCooldown = 0.10f;
-	static inline float fFirstPersonPlayerWeaponReachMult = 1.f;
-	static inline float fFirstPersonPlayerCapsuleRadiusMult = 1.5f;
-	static inline float fThirdPersonPlayerWeaponReachMult = 1.f;
-	static inline float fThirdPersonPlayerCapsuleRadiusMult = 1.5f;
-	static inline float fMountedWeaponReachMult = 1.5f;
-	static inline float fMountedCapsuleRadiusMult = 1.5f;
+	static inline float fHitSameRefCooldown = 0.30f;
+	static inline float fFirstPersonAttackLengthOffset = 0.f;
+	static inline float fPlayerAttackLengthMult = 1.f;
+	static inline float fPlayerAttackRadiusMult = 1.5f;
+	static inline float fMountedAttackLengthMult = 1.5f;
+	static inline float fMountedAttackRadiusMult = 1.5f;
 	static inline SweepAttackMode uSweepAttackMode = SweepAttackMode::kUnlimited;
 	static inline uint32_t uMaxTargetsNoSweepAttack = 1;
 	static inline uint32_t uMaxTargetsSweepAttack = 0;
@@ -88,9 +126,14 @@ struct Settings
 
 	// Trails
 	static inline bool bDisplayTrails = true;
-	static inline bool bTrailUseWeaponWorldBound = true;
 	static inline float fTrailSegmentLifetime = 0.1f;
+	static inline float fTrailFadeOutTime = 0.1f;
 	static inline uint32_t uTrailSegmentsPerSecond = 120;
+	static inline float fTrailDefaultBaseColorR = 0.530f;
+	static inline float fTrailDefaultBaseColorG = 0.530f;
+	static inline float fTrailDefaultBaseColorB = 0.530f;
+	static inline float fTrailDefaultBaseColorA = 1.f;
+	static inline float fTrailBaseColorScaleMult = 1.f;
 
 	// Hitstop
 	static inline bool bEnableHitstop = true;
@@ -163,6 +206,7 @@ struct Settings
 	static inline bool bDisplayRecoilCollisions = false;
 	static inline bool bDisplaySkeletonColliders = false;
 	static inline std::uint32_t uToggleKey = static_cast<std::uint32_t>(-1);
+	static inline std::uint32_t uReloadSettingsKey = static_cast<std::uint32_t>(-1);
 
 	// Internal settings
 	static inline bool bDisableGravityForActiveRagdolls = true;
@@ -202,15 +246,18 @@ struct Settings
 	static inline bool bDisableMod = false;
 
 	static inline uint32_t iPrecisionLayerIndex = 56;
-	static inline uint64_t iPrecisionLayerBitfield = 0x53343561B7FFF;  // same as L_WEAPON layer
-	//static inline int64_t iPrecisionLayerBitfield = 0x1053343561B7FFF;  // same as L_WEAPON layer, but + self-collision (layer 56)
+	//static inline uint64_t iPrecisionLayerBitfield = 0x53343561B7FFF;  // same as L_WEAPON layer
+	static inline uint64_t iPrecisionLayerBitfield = 0x1053343561B7FFF;  // same as L_WEAPON layer, but + self-collision (layer 56)
 
-	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackDefinitions;
+	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitions;
+	static inline std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>> attackAnimationDefinitions;
+	static inline std::vector<TrailDefinition> trailDefinitionsAny;
+	static inline std::vector<TrailDefinition> trailDefinitionsAll;
 	static inline std::vector<std::pair<std::string, std::string>> attackEventPairs;
+	
 	static inline std::unordered_set<RE::BGSMaterialType*> recoilMaterials;
 	static inline RE::BGSBodyPartData* defaultBodyPartData;
 	static inline std::string attackTrailMeshPath = "Effects/WeaponTrails/AttackTrail.nif";
-	static inline std::string enchantedAttackTrailMeshPath = "Effects/WeaponTrails/AttackTrailEnchant.nif";
 	static inline RE::BSFixedString recoilEvent = "Collision_Recoil";
 	static inline RE::BSFixedString firstPersonRecoilEvent = "recoilStart";
 	static inline RE::BSFixedString vanillaRecoilEvent = "recoilLargeStart";
@@ -218,3 +265,5 @@ struct Settings
 
 	static inline RE::TESGlobal* glob_nemesis = nullptr;
 };
+
+

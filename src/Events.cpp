@@ -58,23 +58,11 @@ namespace Events
 
 				if (key == Settings::uToggleKey) {
 					Settings::bDisableMod = !Settings::bDisableMod;
-					//#undef GetObject
-					//					using DefaultObject = RE::BGSDefaultObjectManager::DefaultObject;
-					//					auto defaultObjectManager = RE::BGSDefaultObjectManager::GetSingleton();
-					//					auto playerCharacter = RE::PlayerCharacter::GetSingleton();
-					//
-					//					auto action = defaultObjectManager->GetObject<RE::BGSAction>(DefaultObject::kActionRightPowerAttack);
-					//
-					//					auto input = RE::TESActionData::Create();
-					//					input->source = RE::NiPointer<RE::TESObjectREFR>(playerCharacter);
-					//					input->target;
-					//					input->action = action;
-					//					input->unk20 = 2;
-					//
-					//					input->Process();
+					break;
+				}
 
-					//Actor_Attack(playerCharacter, DefaultObject::kActionRightAttack, input);
-
+				if (key == Settings::uReloadSettingsKey) {
+					Settings::ReadSettings();
 					break;
 				}
 			}

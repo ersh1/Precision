@@ -44,6 +44,24 @@ namespace std
 	};
 }
 
+enum class WeaponType
+{
+	// RE::WEAPON_TYPE
+	kHandToHandMelee = 0,
+	kOneHandSword = 1,
+	kOneHandDagger = 2,
+	kOneHandAxe = 3,
+	kOneHandMace = 4,
+	kTwoHandSword = 5,
+	kTwoHandAxe = 6,
+	kBow = 7,
+	kStaff = 8,
+	kCrossbow = 9,
+
+	// added
+	kShield = 10
+};
+
 enum class CollisionLayer
 {
 	kUnidentified = 0,

@@ -242,11 +242,33 @@ namespace Utils
 
 	void DrawCapsule(RE::bhkRigidBody* a_rigidBody);
 
+	[[nodiscard]] bool GetTorsoPos(RE::Actor* a_actor, RE::NiPoint3& point);
+
 	RE::NiTransform GetLocalTransform(RE::NiAVObject* a_node, const RE::NiTransform& a_worldTransform, bool a_bUseOldParentTransform = false);
 	void UpdateNodeTransformLocal(RE::NiAVObject* a_node, const RE::NiTransform& a_worldTransform);
 	void UpdateBoneMatrices(RE::NiAVObject* a_obj);
 
-	RE::NiPoint3 CatmullRom(const RE::NiPoint3& a_p0, const RE::NiPoint3& a_p1, const RE::NiPoint3& a_p2, const RE::NiPoint3& a_p3, float a_t);
+	RE::NiBound GetMeshBounds(RE::NiAVObject* a_obj);
+
+	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime);
+
+	RE::NiPoint3 CatmullRom(const RE::NiPoint3& a_p0, const RE::NiPoint3& a_p1, const RE::NiPoint3& a_p2, const RE::NiPoint3& a_p3, float a_t);	
+
+	[[nodiscard]] inline RE::NiPoint3 ToOrientationRotation(const RE::NiPoint3& a_vector)
+	{
+		RE::NiPoint3 ret;
+
+		// Pitch
+		ret.x = atan2(a_vector.z, std::sqrtf(a_vector.x * a_vector.x + a_vector.y * a_vector.y));
+
+		// Roll
+		ret.y = 0;
+
+		// Yaw
+		ret.z = atan2(a_vector.y, a_vector.x);
+
+		return ret;
+	}
 
 	// thanks dTRY
 	[[nodiscard]] std::vector<std::string_view> Tokenize(std::string_view a_string, const char a_delimiter);

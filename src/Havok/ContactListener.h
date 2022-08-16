@@ -1,6 +1,6 @@
 #pragma once
 
-class ContactListener : public RE::hkpContactListener, public RE::hkpWorldPostSimulationListener
+class ContactListener : public RE::hkpContactListener
 {
 	struct CollisionEvent
 	{
@@ -22,7 +22,5 @@ public:
 
 	void CollisionRemovedCallback(const RE::hkpCollisionEvent& a_event) override;
 
-	void PostSimulationCallback(RE::hkpWorld* a_world) override;
-
-	RE::NiPointer<RE::bhkWorld> world = nullptr;
+	RE::bhkWorld* world = nullptr;
 };

@@ -3,6 +3,8 @@
 #include "Settings.h"
 #include "Utils.h"
 
+#include <ranges>
+
 void PrecisionHandler::AddPlayerSink()
 {
 	auto playerCharacter = RE::PlayerCharacter::GetSingleton();
@@ -13,6 +15,7 @@ void PrecisionHandler::AddPlayerSink()
 			animationGraph->GetEventSource<RE::BSAnimationGraphEvent>()->AddEventSink(PrecisionHandler::GetSingleton());
 		}
 	}
+	playerCharacter->NotifyAnimationGraph("Collision_WeightResetEnd"sv);
 }
 
 void PrecisionHandler::RemovePlayerSink()
@@ -29,7 +32,9 @@ void PrecisionHandler::RemovePlayerSink()
 
 bool PrecisionHandler::AddActorSink(RE::Actor* a_actor)
 {
-	return a_actor->AddAnimationGraphEventSink(PrecisionHandler::GetSingleton());
+	bool ret = a_actor->AddAnimationGraphEventSink(PrecisionHandler::GetSingleton());
+	a_actor->NotifyAnimationGraph("Collision_WeightResetEnd"sv);
+	return ret;
 }
 
 void PrecisionHandler::RemoveActorSink(RE::Actor* a_actor)
@@ -95,6 +100,10 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 			StartCollision(actor->GetHandle(), activeGraphIdx);
 			break;
 		}
+	case "SoundPlay"_h:
+		if (a_event->payload != "NPCHumanCombatShieldBashSD"sv) {  // crossbow bash
+			break;
+		}
 	case "SoundPlay.WPNSwingUnarmed"_h:
 	case "SoundPlay.NPCHumanCombatShieldBash"_h:
 	case "weaponSwing"_h:
@@ -111,6 +120,7 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 					} else {
 						SetStartedDefaultCollisionWithWeaponSwing(actorHandle);
 					}
+
 					std::optional<bool> bIsLeftSwing = std::nullopt;
 					if (!bIsWPNSwingUnarmed) {
 						bIsLeftSwing = a_event->tag == "weaponLeftSwing"sv;
@@ -186,6 +196,9 @@ void PrecisionHandler::Update(float a_deltaTime)
 
 	Settings::UpdateGlobals();
 
+	ProcessMainUpdateJobs();
+	ProcessDelayedJobs(a_deltaTime);
+
 	if (Settings::bDebug && Settings::bDisplaySkeletonColliders) {
 		auto& actorHandles = RE::ProcessLists::GetSingleton()->highActorHandles;
 		if (actorHandles.size() > 0) {
@@ -243,6 +256,19 @@ void PrecisionHandler::Update(float a_deltaTime)
 		}
 	}
 
+	{
+		WriteLocker locker(actorsInCombatLock);
+		for (auto it = _actorsInLingeringCombat.begin(); it != _actorsInLingeringCombat.end();) {
+
+			it->second -= a_deltaTime;
+			if (it->second < 0.f) {
+				it = _actorsInLingeringCombat.erase(it);
+			} else {
+				++it;
+			}			
+		}
+	}
+	
 	for (auto& trail : _attackTrails) {
 		trail->Update(a_deltaTime);
 	}
@@ -274,8 +300,12 @@ void PrecisionHandler::ApplyHitImpulse(RE::ObjectRefHandle a_refHandle, RE::hkpR
 	auto refr = a_refHandle.get().get();
 	// Apply linear impulse at the center of mass to all bodies within 3 ragdoll constraints
 	Utils::ForEachRagdollDriver(refr, [=](RE::hkbRagdollDriver* driver) {
-		ActiveRagdoll& ragdoll = activeRagdolls[driver];
-		ragdoll.impulseTime = Settings::fRagdollImpulseTime;
+		auto ragdoll = GetActiveRagdollFromDriver(driver);
+		if (!ragdoll) {
+			return;
+		}
+		
+		ragdoll->impulseTime = Settings::fRagdollImpulseTime;
 
 		Utils::ForEachAdjacentBody(driver, a_rigidBody, [=](RE::hkpRigidBody* adjacentBody) {
 			QueuePrePhysicsJob<LinearImpulseJob>(adjacentBody, a_refHandle, a_hitVelocity, a_impulseMult * Settings::fHitImpulseDecayMult1, a_bIsActiveRagdoll);
@@ -425,11 +455,20 @@ void PrecisionHandler::StartCollision(RE::ActorHandle a_actorHandle, uint32_t a_
 bool PrecisionHandler::AddAttack(RE::ActorHandle a_actorHandle, const AttackDefinition& a_attackDefinition)
 {
 	WriteLocker locker(attackCollisionsLock);
+
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return false;
+	}
 	
 	auto& activeActor = _actorsWithAttackCollisions[a_actorHandle];
 
 	for (auto& collisionDef : a_attackDefinition.collisions) {
-		activeActor.AddAttackCollision(a_actorHandle, collisionDef);
+		if (collisionDef.delay) {
+			QueueDelayedJob<DelayedAttackCollisionJob>(*collisionDef.delay, a_actorHandle, collisionDef);
+		} else {
+			activeActor.AddAttackCollision(a_actorHandle, collisionDef);
+		}
 	}
 
 	return true;
@@ -761,13 +800,42 @@ void PrecisionHandler::OnPreLoadGame()
 
 void PrecisionHandler::OnPostLoadGame()
 {
+	
 }
 
 void PrecisionHandler::ProcessPrePhysicsStepJobs()
 {
+	WriteLocker locker(jobsLock);
+
 	for (auto it = _prePhysicsStepJobs.begin(); it != _prePhysicsStepJobs.end();) {
 		if (it->get()->Run()) {
 			it = _prePhysicsStepJobs.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+void PrecisionHandler::ProcessMainUpdateJobs()
+{
+	WriteLocker locker(jobsLock);
+
+	for (auto it = _mainUpdateJobs.begin(); it != _mainUpdateJobs.end();) {
+		if (it->get()->Run()) {
+			it = _mainUpdateJobs.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+void PrecisionHandler::ProcessDelayedJobs(float a_deltaTime)
+{
+	WriteLocker locker(jobsLock);
+
+	for (auto it = _delayedJobs.begin(); it != _delayedJobs.end();) {
+		if (it->get()->Run(a_deltaTime)) {
+			it = _delayedJobs.erase(it);
 		} else {
 			++it;
 		}
@@ -780,6 +848,31 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		return false;
 	}
 
+	// try finding a matching animation definition first
+	RE::BSFixedString projectName;
+	RE::hkStringPtr animName;
+	float animTime;
+
+	if (Utils::GetActiveAnim(a_actor, projectName, animName, animTime)) {
+		std::string projectNameStr = projectName.data();
+		std::transform(projectNameStr.begin(), projectNameStr.end(), projectNameStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+		auto search = Settings::attackAnimationDefinitions.find(projectNameStr);
+		if (search != Settings::attackAnimationDefinitions.end()) {
+			auto& attackDefinitions = search->second;
+
+			std::string animNameStr = animName.data();
+			std::transform(animNameStr.begin(), animNameStr.end(), animNameStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+			std::replace(animNameStr.begin(), animNameStr.end(), '\\', '/');
+
+			auto defIt = attackDefinitions.find(animNameStr);
+			if (defIt != attackDefinitions.end()) {
+				a_outAttackDefinition = defIt->second;
+				return true;
+			}
+		}
+	}
+
+	// if not found, fall back to the usual attack event definitions
 	auto race = a_actor->GetRace();
 	if (!race) {
 		return false;
@@ -790,8 +883,8 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		return false;
 	}
 
-	auto search = Settings::attackDefinitions.find(bodyPartData);
-	if (search == Settings::attackDefinitions.end()) {
+	auto search = Settings::attackRaceDefinitions.find(bodyPartData);
+	if (search == Settings::attackRaceDefinitions.end()) {
 		return false;
 	}
 
@@ -803,9 +896,26 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		if (attackData && attackData->IsLeftAttack() != bIsLeftSwing) {
 			attackData = GetOppositeAttackEvent(attackData, race->attackDataMap.get());
 		}
-	}	
+	}
 
-	auto defIt = attackDefinitions.find(attackData ? attackData->event.c_str() : "DEFAULT");
+	std::string_view attackEvent;
+	if (attackData) {
+		attackEvent = attackData->event;
+	} else {
+		attackEvent = "DEFAULT_UNARMED"sv;
+		if (a_actor->currentProcess && a_actor->currentProcess->middleHigh) {
+			auto equipment = bIsLeftSwing ? a_actor->currentProcess->middleHigh->leftHand : a_actor->currentProcess->middleHigh->rightHand;
+			if (equipment && equipment->object) {
+				if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
+					if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {
+						attackEvent = "DEFAULT"sv;
+					}
+				}
+			}
+		}
+	}
+
+	auto defIt = attackDefinitions.find(attackEvent.data());
 	if (defIt == attackDefinitions.end()) {
 		return false;
 	}
@@ -947,6 +1057,17 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				}
 				break;
 			}
+		case "radiusMult"_h:
+			{
+				float parsedFloat;
+				if (parseFloatParameter(parameter, parsedFloat)) {
+					a_outCollisionDefinition.radiusMult = parsedFloat;
+				} else {
+					logger::error("Invalid {} event payload - radius mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
 		case "length"_h:
 			{
 				float parsedFloat;
@@ -954,6 +1075,17 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					a_outCollisionDefinition.capsuleLength = parsedFloat;
 				} else {
 					logger::error("Invalid {} event payload - length could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
+		case "lengthMult"_h:
+			{
+				float parsedFloat;
+				if (parseFloatParameter(parameter, parsedFloat)) {
+					a_outCollisionDefinition.lengthMult = parsedFloat;
+				} else {
+					logger::error("Invalid {} event payload - length mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
 					return false;
 				}
 				break;
@@ -1030,51 +1162,113 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 	return true;
 }
 
-float PrecisionHandler::GetVisualWeaponAttackReach(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_weaponNode, float a_reachLength, bool a_bUseVisualLengthMult)
+bool PrecisionHandler::CheckActorInCombat(RE::ActorHandle a_actorHandle)
 {
-	float actorScale = 1.f;
-	if (auto actor = a_actorHandle.get()) {
-		actorScale = actor->GetScale();
-	}
+	auto actor = a_actorHandle.get();
+	if (actor) {
+		bool bIsInCombat = actor->IsInCombat();
 
-	if (a_weaponNode) {
-		float visualLength = a_weaponNode->worldBound.radius + a_weaponNode->world.translate.GetDistance(a_weaponNode->worldBound.center);
+		WriteLocker locker(actorsInCombatLock);
 
-		if (a_bUseVisualLengthMult) {
-			visualLength *= Settings::fWeaponLengthMult;
+		auto search = _actorsInLingeringCombat.find(a_actorHandle);
+		if (search != _actorsInLingeringCombat.end()) {
+			if (bIsInCombat) {
+				// refresh combat linger time because we're still in combat
+				search->second = Settings::fCombatStateLingerTime;
+			} else {
+				return true;  // found, no longer in combat but still in lingering combat state
+			}
+		} else if (bIsInCombat) {
+			// add actor to combat map
+			_actorsInLingeringCombat.emplace(a_actorHandle, Settings::fCombatStateLingerTime);
 		}
 
-		// use the lower value in case weapon worldBound is too huge for whatever reason
-		a_reachLength = std::fmin(a_reachLength, visualLength);
+		return bIsInCombat;
 	}
-
-	return a_reachLength * actorScale;
+	
+	return false;
 }
 
-float PrecisionHandler::GetWeaponAttackReach(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_weaponNode, RE::TESObjectWEAP* a_weapon, bool a_bVisual, bool a_bUseVisualLengthMult /*= true*/)
+float PrecisionHandler::GetWeaponMeshLength(RE::NiAVObject* a_weaponNode)
 {
-	float reach = a_weapon ? a_weapon->weaponData.reach : 1.f;
-	float reachLength = reach * Settings::fWeaponReachMult;
-
-	float actorScale = 1.f;
-	if (auto actor = a_actorHandle.get()) {
-		actorScale = actor->GetScale();
+	if (a_weaponNode) {
+		RE::NiBound worldBound = Utils::GetMeshBounds(a_weaponNode);
+		return worldBound.radius + a_weaponNode->world.translate.GetDistance(worldBound.center);
 	}
 
-	if (a_bVisual) {
-		return GetVisualWeaponAttackReach(a_actorHandle, a_weaponNode, reachLength, a_bUseVisualLengthMult);
+	return 0.f;
+}
+
+float PrecisionHandler::GetWeaponAttackLength(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_weaponNode, std::optional<float> a_overrideLength /*= std::nullopt*/, float a_lengthMult /*= 1.f*/)
+{
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return Settings::fMinWeaponLength;
+	}
+
+	float length = 0.f;
+	if (a_overrideLength) {
+		length = *a_overrideLength;
+		length *= actor->GetScale();  // apply actor scale
 	} else {
-		return reachLength * actorScale;
+		length = GetWeaponMeshLength(a_weaponNode);
 	}
+
+	if (length > 0.f) {
+		bool bIsPlayer = actor->IsPlayerRef();
+
+		if (bIsPlayer) {
+			bool bIsFirstPerson = RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
+			if (bIsFirstPerson) {
+				length += Settings::fFirstPersonAttackLengthOffset;
+				length = fmax(length, 0.f);
+			}
+			length *= Settings::fPlayerAttackLengthMult;
+		}
+
+		if (actor->IsOnMount()) {
+			length *= Settings::fMountedAttackLengthMult;
+		}
+		
+		return fmax(length * Settings::fWeaponLengthMult * a_lengthMult, Settings::fMinWeaponLength);
+	}
+	
+	return Settings::fMinWeaponLength;
 }
 
-float PrecisionHandler::GetNodeAttackReach(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node)
+float PrecisionHandler::GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, std::optional<float> a_overrideRadius /*= std::nullopt*/, float a_radiusMult /*= 1.f*/)
 {
-	float actorScale = 1.f;
-	if (auto actor = a_actorHandle.get()) {
-		actorScale = actor->GetScale();
+	float radius = Settings::fWeaponCapsuleRadius;
+	
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return radius;
 	}
 
+	if (a_overrideRadius) {
+		radius = *a_overrideRadius;
+	}
+	
+	radius *= actor->GetScale();
+	radius *= a_radiusMult;
+
+	bool bIsPlayer = actor->IsPlayerRef();
+	if (bIsPlayer) {
+	}
+
+	if (bIsPlayer) {
+		radius *= Settings::fPlayerAttackRadiusMult;
+	}
+
+	if (actor->IsOnMount()) {
+		radius *= Settings::fMountedAttackRadiusMult;
+	}
+
+	return radius;
+}
+
+const RE::hkpCapsuleShape* PrecisionHandler::GetNodeCapsuleShape(RE::NiAVObject* a_node)
+{
 	if (a_node->collisionObject) {
 		auto collisionObject = static_cast<RE::bhkCollisionObject*>(a_node->collisionObject.get());
 		auto rigidBody = collisionObject->GetRigidBody();
@@ -1085,15 +1279,164 @@ float PrecisionHandler::GetNodeAttackReach(RE::ActorHandle a_actorHandle, RE::Ni
 			if (hkpShape->type == RE::hkpShapeType::kCapsule) {
 				auto hkpCapsuleShape = static_cast<const RE::hkpCapsuleShape*>(hkpShape);
 
-				float radius = hkpCapsuleShape->radius;
-				float length = hkpCapsuleShape->vertexA.GetDistance3(hkpCapsuleShape->vertexB);
-
-				return fmax(radius * 2.f, length) * *g_worldScaleInverse * actorScale;
+				return hkpCapsuleShape;
 			}
 		}
 	}
+	
+	return nullptr;
+}
 
-	return 0.f;
+bool PrecisionHandler::GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node, std::optional<float> a_overrideLength, float a_lengthMult, std::optional<float> a_overrideRadius, float a_radiusMult, RE::hkVector4& a_outVertexA, RE::hkVector4& a_outVertexB, float& a_outRadius)
+{
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return false;
+	}
+
+	float actorScale = actor->GetScale();
+
+	float length = 0.f;
+	float radius = 0.f;
+
+	if (auto capsuleShape = GetNodeCapsuleShape(a_node)) {
+		a_outVertexA = capsuleShape->vertexA;
+		a_outVertexB = capsuleShape->vertexB;
+		a_outRadius = capsuleShape->radius;
+	}
+	
+	if (a_overrideRadius) {
+		radius = *a_overrideRadius * *g_worldScale;
+	} else {
+		radius = a_outRadius;
+	}
+
+	float originalLength = a_outVertexA.GetDistance3(a_outVertexB);
+	originalLength = fmax(radius * 2.f, length);
+	length = originalLength;	
+	
+	float finalRadiusMult = a_radiusMult;
+	float finalLengthMult = a_lengthMult;
+
+	if (a_overrideLength) {
+		length = *a_overrideLength * *g_worldScale;
+	}
+
+	bool bIsPlayer = actor->IsPlayerRef();
+	if (bIsPlayer) {
+		bool bIsFirstPerson = RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
+		if (bIsFirstPerson) {
+			length += Settings::fFirstPersonAttackLengthOffset * *g_worldScale;
+			length = fmax(length, 0.f);
+		}
+	}
+
+	if (length > 0.f) {
+		finalLengthMult *= length / originalLength;
+	}
+
+	if (bIsPlayer) {
+		finalLengthMult *= Settings::fPlayerAttackLengthMult;
+		finalRadiusMult *= Settings::fPlayerAttackRadiusMult;
+	}
+
+	if (actor->IsOnMount()) {
+		finalLengthMult *= Settings::fMountedAttackLengthMult;
+		finalRadiusMult *= Settings::fMountedAttackRadiusMult;
+	}
+
+	a_outVertexA = a_outVertexA * actorScale * finalLengthMult;
+	a_outVertexB = a_outVertexB * actorScale;
+	a_outRadius = a_outRadius * actorScale * finalRadiusMult;
+
+	return true;
+}
+
+float PrecisionHandler::GetNodeAttackLength(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node, std::optional<float> a_overrideLength /*= std::nullopt*/, float a_lengthMult /*= 1.f*/)
+{
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return 0.f;
+	}
+
+	float actorScale = actor->GetScale();
+
+	float length = 0.f;
+
+	if (a_overrideLength) {
+		length = *a_overrideLength;
+	} else {
+		if (auto capsuleShape = GetNodeCapsuleShape(a_node)) {
+			length = capsuleShape->vertexA.GetDistance3(capsuleShape->vertexB);
+			length = fmax(capsuleShape->radius * 2.f, length);
+		}
+	}
+
+	length *= actorScale;
+	length *= *g_worldScaleInverse;
+	length *= a_lengthMult;
+
+	bool bIsPlayer = actor->IsPlayerRef();
+	if (bIsPlayer) {
+		bool bIsFirstPerson = RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
+		if (bIsFirstPerson) {
+			length += Settings::fFirstPersonAttackLengthOffset * *g_worldScale;
+			length = fmax(length, 0.f);
+		}
+
+		length *= Settings::fPlayerAttackLengthMult;
+	}
+
+	if (actor->IsOnMount()) {
+		length *= Settings::fMountedAttackLengthMult;
+	}
+	
+	return length;
+}
+
+float PrecisionHandler::GetNodeAttackRadius(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node, std::optional<float> a_overrideRadius /*= std::nullopt*/, float a_radiusMult /*= 1.f*/)
+{
+	auto actor = a_actorHandle.get();
+	if (!actor) {
+		return 0.f;
+	}
+
+	float actorScale = actor->GetScale();
+
+	float radius = 0.f;
+
+	if (a_overrideRadius) {
+		radius = *a_overrideRadius;
+	} else {
+		if (auto capsuleShape = GetNodeCapsuleShape(a_node)) {
+			radius = capsuleShape->radius;
+		}
+	}
+
+	radius *= actorScale;
+	radius *= *g_worldScaleInverse;
+	radius *= a_radiusMult;
+
+	bool bIsPlayer = actor->IsPlayerRef();
+	if (bIsPlayer) {
+		radius *= Settings::fPlayerAttackRadiusMult;
+	}
+
+	if (actor->IsOnMount()) {
+		radius *= Settings::fMountedAttackRadiusMult;
+	}
+
+	return radius;	
+}
+
+std::shared_ptr<ActiveRagdoll> PrecisionHandler::GetActiveRagdollFromDriver(RE::hkbRagdollDriver* a_driver)
+{
+	auto search = activeRagdolls.find(a_driver);
+	if (search != activeRagdolls.end()) {
+		return search->second;
+	}
+	
+	return nullptr;
 }
 
 RE::NiPointer<RE::BGSAttackData>& PrecisionHandler::GetOppositeAttackEvent(RE::NiPointer<RE::BGSAttackData>& a_attackData, RE::BGSAttackDataMap* attackDataMap)
@@ -1171,6 +1514,30 @@ bool PrecisionHandler::AddCollisionFilterComparisonCallback(SKSE::PluginHandle a
 	return true;
 }
 
+bool PrecisionHandler::AddWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback a_weaponCollisionCallback)
+{
+	WriteLocker locker(callbacksLock);
+
+	if (weaponWeaponCollisionCallbacks.contains(a_pluginHandle)) {
+		return false;
+	}
+
+	weaponWeaponCollisionCallbacks.emplace(a_pluginHandle, a_weaponCollisionCallback);
+	return true;
+}
+
+bool PrecisionHandler::AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback a_weaponCollisionCallback)
+{
+	WriteLocker locker(callbacksLock);
+
+	if (weaponProjectileCollisionCallbacks.contains(a_pluginHandle)) {
+		return false;
+	}
+
+	weaponProjectileCollisionCallbacks.emplace(a_pluginHandle, a_weaponCollisionCallback);
+	return true;
+}
+
 bool PrecisionHandler::RemovePreHitCallback(SKSE::PluginHandle a_pluginHandle)
 {
 	WriteLocker locker(callbacksLock);
@@ -1199,114 +1566,123 @@ bool PrecisionHandler::RemoveCollisionFilterComparisonCallback(SKSE::PluginHandl
 	return collisionFilterComparisonCallbacks.erase(a_pluginHandle);
 }
 
-float PrecisionHandler::GetAttackCollisionCapsuleLength(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType /*= RequestedAttackCollisionType::Default*/) const
+bool PrecisionHandler::RemoveWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle)
+{
+	WriteLocker locker(callbacksLock);
+
+	return weaponWeaponCollisionCallbacks.erase(a_pluginHandle);
+}
+
+bool PrecisionHandler::RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle)
+{
+	WriteLocker locker(callbacksLock);
+
+	return weaponProjectileCollisionCallbacks.erase(a_pluginHandle);
+}
+
+float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType /*= RequestedAttackCollisionType::Default*/) const
 {
 	float length = 0.f;
 
 	if (a_actorHandle) {
-		{
-			ReadLocker locker(attackCollisionsLock);
-
-			auto search = _actorsWithAttackCollisions.find(a_actorHandle);
-			
-			if (search != _actorsWithAttackCollisions.end() && !search->second.IsEmpty()) {  // actor has at least one active collision
-				search->second.ForEachAttackCollision([&](std::shared_ptr<AttackCollision> attackCollision) {
-					if (a_collisionType == RequestedAttackCollisionType::LeftWeapon && attackCollision->nodeName != "SHIELD"sv) {
-						return;
-					} else if (a_collisionType == RequestedAttackCollisionType::RightWeapon && attackCollision->nodeName != "WEAPON"sv) {
-						return;
-					}
-
-					if (attackCollision->capsuleLength > length) {
-						length = attackCollision->capsuleLength;
-					}
-				});
-
-				return length;
+		auto actor = a_actorHandle.get();
+		if (actor) {
+			if (Settings::bDisableMod) {
+				return Actor_GetReach(actor.get());
 			}
-		}
-		
-		if (a_collisionType != RequestedAttackCollisionType::Current) {  // actor has no active collisions, calculate a default capsule length
-			auto actor = a_actorHandle.get();
-			if (actor) {
-				RE::InventoryEntryData* attackingWeapon = nullptr;
 
+			{
+				ReadLocker locker(attackCollisionsLock);
+
+				auto search = _actorsWithAttackCollisions.find(a_actorHandle);
+
+				if (search != _actorsWithAttackCollisions.end() && !search->second.IsEmpty()) {  // actor has at least one active collision
+					search->second.ForEachAttackCollision([&](std::shared_ptr<AttackCollision> attackCollision) {
+						if (a_collisionType == RequestedAttackCollisionType::LeftWeapon && attackCollision->nodeName != "SHIELD"sv) {
+							return;
+						} else if (a_collisionType == RequestedAttackCollisionType::RightWeapon && attackCollision->nodeName != "WEAPON"sv) {
+							return;
+						}
+
+						if (attackCollision->capsuleLength > length) {
+							length = attackCollision->capsuleLength;
+						}
+					});
+
+					return length;
+				}
+			}
+
+			if (a_collisionType != RequestedAttackCollisionType::Current) {  // actor has no active collisions, calculate a default capsule length
 				if (actor->currentProcess && actor->currentProcess->middleHigh) {
 					AttackDefinition attackDefinition;
-
-					auto attackData = Actor_GetAttackData(actor.get());
-					bool bIsLeftHand = attackData ? attackData->IsLeftAttack() : false;
-
+					
+					bool bIsLeftHand;
 					if (a_collisionType == RequestedAttackCollisionType::LeftWeapon) {
 						bIsLeftHand = true;
 					} else if (a_collisionType == RequestedAttackCollisionType::RightWeapon) {
 						bIsLeftHand = false;
+					} else {
+						auto attackData = Actor_GetAttackData(actor.get());
+						bIsLeftHand = attackData ? attackData->IsLeftAttack() : false;
 					}
 
 					if (GetAttackCollisionDefinition(actor.get(), attackDefinition, bIsLeftHand)) {
-						RE::TESObjectWEAP* weapon = nullptr;
-						auto proc = actor->currentProcess->middleHigh;
-						attackingWeapon = bIsLeftHand ? proc->leftHand : proc->rightHand;
-						if (attackingWeapon && attackingWeapon->object) {
-							weapon = attackingWeapon->object->As<RE::TESObjectWEAP>();
-						}
-
-						bool bFoundNode = false;
-
 						for (auto& collisionDef : attackDefinition.collisions) {
 							float collisionScale = collisionDef.transform ? collisionDef.transform->scale : 1.f;
-							if (collisionDef.capsuleLength) {
-								if (collisionDef.capsuleLength > length) {
-									length = *collisionDef.capsuleLength * collisionScale;
-								}
-								continue;
+							if (collisionDef.lengthMult) {
+								collisionScale *= *collisionDef.lengthMult;
 							}
-
 							if (collisionDef.nodeName == "WEAPON"sv || collisionDef.nodeName == "SHIELD"sv) {
-								RE::NiAVObject* weaponNode = nullptr;
-								auto niAVObject = actor->GetNodeByName(collisionDef.nodeName);
-								if (niAVObject) {
-									auto node = niAVObject->AsNode();
-									if (node && node->children.size() > 0 && node->children[0]) {
-										weaponNode = node->children[0].get();
+								auto equipment = bIsLeftHand ? actor->currentProcess->middleHigh->leftHand : actor->currentProcess->middleHigh->rightHand;
+								if (equipment->object) {
+									if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
+										if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {
+											RE::NiAVObject* weaponNode = nullptr;
+											auto niAVObject = actor->GetNodeByName(collisionDef.nodeName);
+											if (niAVObject) {
+												auto node = niAVObject->AsNode();
+												if (node && node->children.size() > 0 && node->children[0]) {
+													weaponNode = node->children[0].get();
 
-										float nodeLength = GetWeaponAttackReach(a_actorHandle, weaponNode, weapon, !Settings::bUseWeaponReach) * collisionScale;
+													float nodeLength = GetWeaponAttackLength(a_actorHandle, weaponNode, collisionDef.capsuleLength, collisionScale);
 
-										if (a_actorHandle.native_handle() == 0x100000) {
-											bool bIsFirstPerson = RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
-											nodeLength *= bIsFirstPerson ? Settings::fFirstPersonPlayerWeaponReachMult : Settings::fThirdPersonPlayerWeaponReachMult;
+													if (nodeLength > length) {
+														length = nodeLength;
+													}
+												}
+											}
+											
+											continue;
 										}
-
-										if (actor->IsOnMount()) {
-											nodeLength *= Settings::fMountedWeaponReachMult;
-										}
-
-										if (nodeLength > length) {
-											length = nodeLength;
-										}
-										bFoundNode = true;
 									}
 								}
-							} else {
-								auto node = actor->GetNodeByName(collisionDef.nodeName);
-								if (node) {
-									float nodeLength = GetNodeAttackReach(a_actorHandle, node) * collisionScale;
-									if (nodeLength > length) {
-										length = nodeLength;
-									}
-									bFoundNode = true;
+								
+								// fallthrough when no weapon equipped - set the node name to R hand or we'll try to get node length of the WEAPON/SHIELD node which is 0
+								collisionDef.nodeName = "NPC R Hand [RHnd]"sv;
+							}
+							
+							// not weapon
+							auto node = actor->GetNodeByName(collisionDef.nodeName);
+							if (node) {
+								float nodeLength = GetNodeAttackLength(a_actorHandle, node, collisionDef.capsuleLength, collisionScale);
+								float nodeRadius = GetNodeAttackRadius(a_actorHandle, node, collisionDef.capsuleRadius, collisionScale);
+
+								nodeLength = std::fmax(nodeLength, nodeRadius);
+								if (nodeLength > length) {
+									length = nodeLength;
 								}
 							}
-						}
-
-						if (!bFoundNode) {
-							length = GetWeaponAttackReach(a_actorHandle, nullptr, weapon, !Settings::bUseWeaponReach);
 						}
 					}
 				}
 			}
 		}
-	}
+		
+		if (length == 0.f) {
+			length = Actor_GetReach(actor.get());
+		}
+	}	
 
 	return length;
 }
@@ -1356,4 +1732,26 @@ PRECISION_API::CollisionFilterComparisonResult PrecisionHandler::RunCollisionFil
 	}
 
 	return PRECISION_API::CollisionFilterComparisonResult::Continue;
+}
+
+std::vector<PrecisionHandler::WeaponCollisionCallbackReturn> PrecisionHandler::RunWeaponWeaponCollisionCallbacks(const PrecisionHitData& a_precisionHitData)
+{
+	ReadLocker locker(callbacksLock);
+
+	std::vector<WeaponCollisionCallbackReturn> ret;
+	for (auto& entry : weaponWeaponCollisionCallbacks) {
+		ret.emplace_back(entry.second(a_precisionHitData));
+	}
+	return ret;
+}
+
+std::vector<PrecisionHandler::WeaponCollisionCallbackReturn> PrecisionHandler::RunWeaponProjectileCollisionCallbacks(const PrecisionHitData& a_precisionHitData)
+{
+	ReadLocker locker(callbacksLock);
+
+	std::vector<WeaponCollisionCallbackReturn> ret;
+	for (auto& entry : weaponProjectileCollisionCallbacks) {
+		ret.emplace_back(entry.second(a_precisionHitData));
+	}
+	return ret;
 }

@@ -20,6 +20,20 @@ void hkpWorld_removeContactListener(RE::hkpWorld* a_this, RE::hkpContactListener
 	}
 }
 
+bool hkpWorld_hasContactListener(RE::hkpWorld* a_this, RE::hkpContactListener* a_worldListener)
+{
+	RE::hkArray<RE::hkpContactListener*>& listeners = a_this->contactListeners;
+
+	for (int i = 0; i < listeners.size(); i++) {
+		RE::hkpContactListener* listener = listeners[i];
+		if (listener == a_worldListener) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 RE::bhkCharProxyController* GetCharProxyController(RE::Actor* a_actor)
 {
 	auto controller = a_actor->GetCharController();

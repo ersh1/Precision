@@ -77,6 +77,48 @@ namespace Messaging
 
 	float PrecisionInterface::GetAttackCollisionCapsuleLength(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType /*= RequestedAttackCollisionType::Default*/) const noexcept
 	{
-		return PrecisionHandler::GetSingleton()->GetAttackCollisionCapsuleLength(a_actorHandle, a_collisionType);
+		return PrecisionHandler::GetSingleton()->GetAttackCollisionReach(a_actorHandle, a_collisionType);
 	}
+
+	APIResult PrecisionInterface::AddWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback&& a_callback) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->AddWeaponWeaponCollisionCallback(a_pluginHandle, a_callback)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::AlreadyRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::RemoveWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->RemoveWeaponWeaponCollisionCallback(a_pluginHandle)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::NotRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback&& a_callback) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->AddWeaponProjectileCollisionCallback(a_pluginHandle, a_callback)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::AlreadyRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->RemoveWeaponProjectileCollisionCallback(a_pluginHandle)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::NotRegistered;
+		}
+	}
+
+	void PrecisionInterface::ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept
+	{		
+		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_actorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true);
+	}
+
 }
