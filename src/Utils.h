@@ -249,6 +249,7 @@ namespace Utils
 	void UpdateBoneMatrices(RE::NiAVObject* a_obj);
 
 	RE::NiBound GetModelBounds(RE::NiAVObject* a_obj);
+	//float GetTopVertex(RE::NiAVObject* a_obj);
 
 	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime);
 

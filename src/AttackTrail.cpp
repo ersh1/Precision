@@ -270,7 +270,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 		}
 		
 		// check enchantment
-		if (a_trailDefinition.enchantmentNames || a_trailDefinition.effectKeywords || a_trailDefinition.effectShaders) {
+		if (a_trailDefinition.enchantmentNames || a_trailDefinition.effectNames || a_trailDefinition.effectKeywords || a_trailDefinition.effectShaders) {
 			if (!a_actorHandle) {
 				return false;
 			}
@@ -517,7 +517,7 @@ RE::BSVisit::BSVisitControl AttackTrail::ApplyColorSettings(RE::BSGeometry* a_ge
 					}
 
 					if (baseColorScaleMult) {
-						effectShaderMaterial->baseColorScale *= *baseColorScaleMult;
+						effectShaderMaterial->baseColorScale = *baseColorScaleMult;
 					}
 
 					effectShaderMaterial->baseColorScale *= Settings::fTrailBaseColorScaleMult;

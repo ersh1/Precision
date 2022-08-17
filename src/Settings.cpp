@@ -367,7 +367,7 @@ void Settings::ReadSettings()
 						}
 					}
 
-					if (bHasWeaponKeyword || bHasEffectKeyword || bHasEffectShader) {
+					if (bHasWeaponName || bHasWeaponKeyword || bHasEnchantmentName || bHasEffectName || bHasEffectKeyword || bHasEffectShader) {
 
 						// conditions
 						auto& trailVisualsTbl = *trailDefinitionTbl["Visuals"].as_table();
@@ -458,6 +458,7 @@ void Settings::ReadSettings()
 	attackRaceDefinitions.clear();
 	attackAnimationDefinitions.clear();
 	trailDefinitionsAny.clear();
+	trailDefinitionsAll.clear();
 	attackEventPairs.clear();
 
 	auto baseToml = std::filesystem::path(basecfg);

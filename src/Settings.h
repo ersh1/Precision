@@ -265,6 +265,13 @@ struct Settings
 	static inline RE::BSFixedString vanillaRecoilEvent = "recoilLargeStart";
 	static inline RE::BSFixedString jumpIframeNode = "NPC Spine2 [Spn2]";
 
+	static inline float defaultMeshLengthOneHandSword = 70.f;
+	static inline float defaultMeshLengthOneHandDagger = 32.4f;
+	static inline float defaultMeshLengthOneHandAxe = 43.f;
+	static inline float defaultMeshLengthOneHandMace = 48.3f;
+	static inline float defaultMeshLengthTwoHandSword = 95.f;
+	static inline float defaultMeshLengthTwoHandAxe = 56.5f;
+
 	static inline RE::TESGlobal* glob_nemesis = nullptr;
 };
 

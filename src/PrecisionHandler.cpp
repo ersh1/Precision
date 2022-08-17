@@ -88,9 +88,9 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 	std::string_view eventTag = a_event->tag.data();
 
-	if (actor == RE::PlayerCharacter::GetSingleton()) {
+	/*if (actor == RE::PlayerCharacter::GetSingleton()) {
 		logger::debug("{}", a_event->tag);
-	}
+	}*/
 
 	switch (hash(eventTag.data(), eventTag.size())) {
 	case "Collision_AttackStart"_h:
@@ -1197,8 +1197,8 @@ float PrecisionHandler::GetWeaponMeshLength(RE::NiAVObject* a_weaponNode)
 {
 	if (a_weaponNode) {
 		RE::NiBound modelBound = Utils::GetModelBounds(a_weaponNode);
-		float offset = modelBound.center.y;
-		return modelBound.radius + offset;
+		float offset = fabs(modelBound.center.y);
+		return (modelBound.radius + offset) * a_weaponNode->world.scale;
 	}
 
 	return 0.f;

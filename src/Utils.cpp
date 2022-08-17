@@ -568,7 +568,7 @@ namespace Utils
 		}
 	}
 
-	void TraverseMeshes(RE::NiAVObject* a_object, std::function<void(RE::BSGeometry*)> a_func)
+	void TraverseMeshes(RE::NiAVObject* a_object, bool a_bStrict, std::function<void(RE::BSGeometry*)> a_func)
 	{
 		if (!a_object) {
 			return;
@@ -576,7 +576,7 @@ namespace Utils
 
 		if (a_object->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 			return;
-		}
+		}		
 
 		// Skip billboards and their children
 		if (a_object->GetRTTI() == (RE::NiRTTI*)RE::NiRTTI_NiBillboardNode.address()) {
@@ -585,17 +585,38 @@ namespace Utils
 
 		auto geom = a_object->AsGeometry();
 		if (geom) {
+			if (a_bStrict) {
+				if (geom->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
+					return;
+				}
+			}
+
+			// Skip particles 
 			auto& type = geom->GetType();
 			if (type == RE::BSGeometry::Type::kParticles || type == RE::BSGeometry::Type::kStripParticles) {
 				return;
 			}
+
+			// Skip anything that does not write into zbuffer 
+			const auto effect = geom->properties[RE::BSGeometry::States::kEffect];
+			if (a_bStrict) {
+				const auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect.get());
+				if (effectShader && effectShader->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
+					return;
+				}
+			}
+			const auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
+			if (lightingShader && lightingShader->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
+				return;
+			}
+
 			return a_func(geom);
 		}
 		
 		auto node = a_object->AsNode();
 		if (node) {
 			for (auto& child : node->GetChildren()) {
-				TraverseMeshes(child.get(), a_func);
+				TraverseMeshes(child.get(), a_bStrict, a_func);
 			}
 		}
 	}
@@ -603,14 +624,77 @@ namespace Utils
 	RE::NiBound GetModelBounds(RE::NiAVObject* a_obj)
 	{
 		RE::NiBound ret{};
-		TraverseMeshes(a_obj, [&](auto&& a_geometry) {
+		TraverseMeshes(a_obj, true, [&](auto&& a_geometry) {
 			RE::NiBound modelBound = a_geometry->modelBound;
+
+			modelBound.center *= a_geometry->local.scale;
+			modelBound.radius *= a_geometry->local.scale;
+
 			modelBound.center += a_geometry->local.translate;
+
 			NiBound_Combine(ret, modelBound);
 		});
 
+		if (ret.radius == 0.f) {
+			// try less strict
+			TraverseMeshes(a_obj, false, [&](auto&& a_geometry) {
+				RE::NiBound modelBound = a_geometry->modelBound;
+
+				modelBound.center *= a_geometry->local.scale;
+				modelBound.radius *= a_geometry->local.scale;
+
+				modelBound.center += a_geometry->local.translate;
+
+				NiBound_Combine(ret, modelBound);
+			});
+		}
+
 		return ret;
 	}
+
+	//float FindTopVertex(RE::BSGeometry* a_geom)
+	//{
+	//	float top = 0.f;
+	//	if (auto triShape = a_geom->AsTriShape()) {
+	//		auto vertexSize = triShape->vertexDesc.GetSize();
+	//		auto vertexCount = triShape->vertexCount;
+	//		auto posOffset = triShape->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
+
+	//		for (uint32_t v = 0; v < vertexCount; ++v) {
+	//			uintptr_t vert = (uintptr_t)triShape->rendererData->rawVertexData + (v * vertexSize);
+	//			RE::NiPoint3* vertPos = (RE::NiPoint3*)(vert + posOffset);
+
+	//			if (vertPos->y > top) {
+	//				top = vertPos->y;
+	//			}
+	//		}
+	//	}
+
+	//	return top;
+	//}
+
+	//float GetTopVertex(RE::NiAVObject* a_obj)
+	//{
+	//	float ret = 0.f;
+	//	TraverseMeshes(a_obj, true, [&](auto&& a_geometry) {
+	//		float vert = FindTopVertex(a_geometry) + a_geometry->local.translate.y;
+	//		if (vert > ret) {
+	//			ret = vert;
+	//		}
+	//	});
+
+	//	if (ret == 0.f) {
+	//		// try less strict
+	//		TraverseMeshes(a_obj, false, [&](auto&& a_geometry) {
+	//			float vert = FindTopVertex(a_geometry) + a_geometry->local.translate.y;
+	//			if (vert > ret) {
+	//				ret = vert;
+	//			}
+	//		});
+	//	}
+
+	//	return ret;
+	//}
 
 	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime)
 	{
