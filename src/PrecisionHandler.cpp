@@ -1018,12 +1018,16 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				a_outCollisionDefinition.bNoTrail = true;
 				break;
 			}
+		case "trailUseTrueLength"_h:
+			{
+				a_outCollisionDefinition.bTrailUseTrueLength = true;
+				break;
+			}
 		case "weaponTip"_h:
 			{
 				a_outCollisionDefinition.bWeaponTip = true;
 				break;
 			}
-
 		case "damageMult"_h:
 			{
 				float parsedFloat;
@@ -1192,8 +1196,9 @@ bool PrecisionHandler::CheckActorInCombat(RE::ActorHandle a_actorHandle)
 float PrecisionHandler::GetWeaponMeshLength(RE::NiAVObject* a_weaponNode)
 {
 	if (a_weaponNode) {
-		RE::NiBound worldBound = Utils::GetMeshBounds(a_weaponNode);
-		return worldBound.radius + a_weaponNode->world.translate.GetDistance(worldBound.center);
+		RE::NiBound modelBound = Utils::GetModelBounds(a_weaponNode);
+		float offset = modelBound.center.y;
+		return modelBound.radius + offset;
 	}
 
 	return 0.f;
@@ -1635,7 +1640,7 @@ float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, R
 							}
 							if (collisionDef.nodeName == "WEAPON"sv || collisionDef.nodeName == "SHIELD"sv) {
 								auto equipment = bIsLeftHand ? actor->currentProcess->middleHigh->leftHand : actor->currentProcess->middleHigh->rightHand;
-								if (equipment->object) {
+								if (equipment && equipment->object) {
 									if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
 										if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {
 											RE::NiAVObject* weaponNode = nullptr;

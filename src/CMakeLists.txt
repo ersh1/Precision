@@ -96,7 +96,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 		PRIVATE
 			"/sdl"	# Enable Additional Security Checks
 			"/utf-8"	# Set Source and Executable character sets to UTF-8
-			"/Zi"	# Debug Information Format
+#			"/Zi"	# Debug Information Format
 
 			"/await"
 
@@ -105,8 +105,8 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 
 			"/wd4200" # nonstandard extension used : zero-sized array in struct/union
 
-			"$<$<CONFIG:DEBUG>:>"
-			"$<$<CONFIG:RELEASE>:/Zc:inline;/JMC-;/Ob3>"
+			"$<$<CONFIG:DEBUG>:/ZI>"
+			"$<$<CONFIG:RELEASE>:/Zi;/Zc:inline;/JMC-;/Ob3>"
 	)
 
 	target_link_options(

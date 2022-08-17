@@ -574,6 +574,10 @@ namespace Utils
 			return;
 		}
 
+		if (a_object->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+			return;
+		}
+
 		// Skip billboards and their children
 		if (a_object->GetRTTI() == (RE::NiRTTI*)RE::NiRTTI_NiBillboardNode.address()) {
 			return;
@@ -581,6 +585,10 @@ namespace Utils
 
 		auto geom = a_object->AsGeometry();
 		if (geom) {
+			auto& type = geom->GetType();
+			if (type == RE::BSGeometry::Type::kParticles || type == RE::BSGeometry::Type::kStripParticles) {
+				return;
+			}
 			return a_func(geom);
 		}
 		
@@ -592,18 +600,16 @@ namespace Utils
 		}
 	}
 
-	RE::NiBound GetMeshBounds(RE::NiAVObject* a_obj)
+	RE::NiBound GetModelBounds(RE::NiAVObject* a_obj)
 	{
-		std::optional<RE::NiBound> ret;
+		RE::NiBound ret{};
 		TraverseMeshes(a_obj, [&](auto&& a_geometry) {
-			if (ret) {
-				NiBound_Combine(*ret, a_geometry->worldBound);
-			} else {
-				ret = a_geometry->worldBound;
-			}
+			RE::NiBound modelBound = a_geometry->modelBound;
+			modelBound.center += a_geometry->local.translate;
+			NiBound_Combine(ret, modelBound);
 		});
 
-		return ret ? *ret : RE::NiBound{};
+		return ret;
 	}
 
 	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime)

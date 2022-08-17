@@ -4,14 +4,17 @@
 #include "Settings.h"
 #include "Utils.h"
 #include "render/line_drawer.h"
+#include "render/DrawHandler.h"
 
-AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand /*= false*/) :
+AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength) :
 	actorHandle(a_actorHandle)
 {
 	weaponRotation = RE::NiMatrix3(0.f, RE::NI_HALF_PI, -RE::NI_HALF_PI);
 	if (a_node && a_node->parent && a_cell) {
 		collisionNode = RE::NiPointer<RE::NiNode>(a_node);
 		collisionParentNode = RE::NiPointer<RE::NiNode>(a_node->parent);
+		collisionNodeLocalTransform = collisionNode->local;
+		//collisionNodeLocalTransform.rotate = collisionNodeLocalTransform.rotate * weaponRotation;
 		
 		std::string_view trailMeshPath = Settings::attackTrailMeshPath;
 		std::optional<std::string_view> additionalEmitterPath;
@@ -34,15 +37,18 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 
 		trailParticle = RE::NiPointer<RE::BSTempEffectParticle>(RE::BSTempEffectParticle::Spawn(a_cell, 10.f, trailMeshPath.data(), collisionParentNode->world.rotate, collisionParentNode->world.translate, 1.f, 7, nullptr));
 
-		weaponNode = RE::NiPointer<RE::NiNode>(static_cast<RE::NiNode*>(a_node->parent->children[0].get()));
-		if (weaponNode && weaponNode != collisionNode) {
-			if (a_weaponItem && a_weaponItem->object) {
-				if (auto equippedWeapon = a_weaponItem->object->As<RE::TESObjectWEAP>()) {
-					float length = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
+		if (!a_bTrailUseTrueLength)
+		{
+			weaponNode = RE::NiPointer<RE::NiNode>(static_cast<RE::NiNode*>(a_node->parent->children[0].get()));
+			if (weaponNode && weaponNode != collisionNode) {
+				if (a_weaponItem && a_weaponItem->object) {
+					if (auto equippedWeapon = a_weaponItem->object->As<RE::TESObjectWEAP>()) {
+						float length = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
 
-					scale = length * 0.01f;
+						scale = length * 0.01f;
 
-					return;
+						return;
+					}
 				}
 			}
 		}
@@ -69,13 +75,14 @@ void AttackTrail::Update(float a_deltaTime)
 			visibilityPercent += (Settings::fTrailSegmentLifetime * lifetimeMult) * (1.f / Settings::fTrailFadeOutTime);
 		}
 
-		// add new position
-		RE::NiTransform transform = collisionParentNode->world;
-		transform.rotate = transform.rotate * weaponRotation;
-		trailHistory.emplace_back(transform);
-
 		constexpr RE::NiPoint3 forwardVector{ 1.f, 0.f, 0.f };
 
+		// add new position
+		RE::NiTransform transform = collisionParentNode->world;
+		transform = transform * collisionNodeLocalTransform;
+		//transform.rotate = transform.rotate * weaponRotation;
+		trailHistory.emplace_back(transform);
+		
 		if (trailParticle && trailParticle->particleObject) {
 			if (!bAppliedTrailColorSettings || bExpired) {
 				if (bExpired) {
@@ -90,7 +97,7 @@ void AttackTrail::Update(float a_deltaTime)
 				bAppliedTrailColorSettings = true;
 			}
 
-			if (auto fadeNode = trailParticle->particleObject->AsFadeNode()) {				
+			if (auto fadeNode = trailParticle->particleObject->AsFadeNode()) {
 				fadeNode->currentFade = 1.f;
 
 				if (fadeNode->children.size() > 0) {
@@ -206,7 +213,7 @@ void AttackTrail::Update(float a_deltaTime)
 							Utils::SetRotationMatrix(worldTransform.rotate, -dir.x, dir.y, dir.z);
 							worldTransform.rotate = worldTransform.rotate * weaponRotation;
 							worldTransform.scale = scale;
-
+							
 							RE::NiTransform localTransform = Utils::GetLocalTransform(trailRootNode->children[currentBoneIdx].get(), worldTransform);
 
 							for (uint32_t i = currentBoneIdx; i < trailRootNode->children.size(); ++i) {

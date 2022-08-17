@@ -47,7 +47,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 							equippedWeapon = equipment->As<RE::TESObjectWEAP>();
 						}
 
-						if (equippedWeapon && equippedWeapon->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee) {
+						if (!equippedWeapon || (equippedWeapon && equippedWeapon->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee)) {
 							bShowTrail = false;
 						}
 					}					
@@ -62,7 +62,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 
 					// add trail
 					if (bShowTrail) {
-						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand));
+						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand, a_collisionDefinition.bTrailUseTrueLength));
 					}
 				}
 

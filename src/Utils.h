@@ -248,7 +248,7 @@ namespace Utils
 	void UpdateNodeTransformLocal(RE::NiAVObject* a_node, const RE::NiTransform& a_worldTransform);
 	void UpdateBoneMatrices(RE::NiAVObject* a_obj);
 
-	RE::NiBound GetMeshBounds(RE::NiAVObject* a_obj);
+	RE::NiBound GetModelBounds(RE::NiAVObject* a_obj);
 
 	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime);
 

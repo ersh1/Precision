@@ -59,6 +59,13 @@ void Settings::ReadSettings()
 			bNoTrail = *noTrailVal;
 		}
 
+		// trail use true length
+		bool bTrailUseTrueLength = false;
+		auto trailUseTrueLengthVal = a_collisionTable["TrailUseTrueLength"].value<bool>();
+		if (trailUseTrueLengthVal) {
+			bTrailUseTrueLength = *trailUseTrueLengthVal;
+		}
+
 		// weapon tip
 		bool bWeaponTip = false;
 		auto weaponTipVal = a_collisionTable["WeaponTip"].value<bool>();
@@ -147,7 +154,7 @@ void Settings::ReadSettings()
 			}
 		}
 
-		a_collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bWeaponTip, damageMult, duration, durationMult, delay, radius, radiusMult, length, lengthMult, transform);
+		a_collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bTrailUseTrueLength, bWeaponTip, damageMult, duration, durationMult, delay, radius, radiusMult, length, lengthMult, transform);
 	};
 
 	const auto readToml = [&](std::filesystem::path path) {

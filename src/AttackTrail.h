@@ -4,7 +4,7 @@
 
 struct AttackTrail
 {
-	AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand = false);
+	AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength);
 
 	void Update(float a_deltaTime);
 
@@ -34,6 +34,7 @@ struct AttackTrail
 	float segmentsToAddRemainder = 0.f;
 
 	RE::NiMatrix3 weaponRotation;
+	RE::NiTransform collisionNodeLocalTransform;
 
 	std::vector<RE::NiTransform> trailHistory;
 	std::deque<float> segmentTimestamps;
