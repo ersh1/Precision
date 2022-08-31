@@ -22,6 +22,8 @@
 #endif
 #pragma warning(pop)
 
+#include <shared_mutex>
+
 using namespace std::literals;
 
 namespace logger = SKSE::log;
@@ -43,6 +45,10 @@ namespace std
 		}
 	};
 }
+
+using Lock = std::shared_mutex;
+using ReadLocker = std::shared_lock<Lock>;
+using WriteLocker = std::unique_lock<Lock>;
 
 enum class WeaponType
 {

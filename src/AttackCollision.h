@@ -15,6 +15,7 @@ struct AttackCollision
 	float damageMult = 1.f;
 	float staggerMult = 1.f;
 	std::optional<float> lifetime;
+	std::optional<RE::NiPoint3> groundShake;
 
 	RE::ActorHandle actorHandle;
 	RE::NiPointer<RE::NiNode> collisionNode;
@@ -81,10 +82,6 @@ struct AttackCollisions
 	
 
 private:
-	using Lock = std::shared_mutex;
-	using ReadLocker = std::shared_lock<Lock>;
-	using WriteLocker = std::unique_lock<Lock>;
-
 	mutable Lock lock;
 
 	std::vector<std::shared_ptr<AttackCollision>> _attackCollisions{};

@@ -128,7 +128,9 @@ extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::Interfa
 	switch (a_interfaceVersion) {
 	case PRECISION_API::InterfaceVersion::V1:
 		[[fallthrough]];
-	case PRECISION_API::InterfaceVersion::V2 :
+	case PRECISION_API::InterfaceVersion::V2:
+		[[fallthrough]];
+	case PRECISION_API::InterfaceVersion::V3:
 		logger::info("Precision::RequestPluginAPI returned the API singleton");
 		return static_cast<void*>(api);
 	}

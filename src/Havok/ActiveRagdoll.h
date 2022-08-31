@@ -31,5 +31,5 @@ struct ActiveRagdoll
 	bool hasHipBoneTransform = false;
 	bool shouldNullOutWorldWhenRemovingFromWorld = false;
 
-	inline bool IsImpulseActive() const { return impulseTime > 0.f; }
+	inline bool IsImpulseActive() const { return impulseTime > 0.f || state != RagdollState::kKeyframed; }
 };

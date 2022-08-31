@@ -62,7 +62,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 
 					// add trail
 					if (bShowTrail) {
-						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand, a_collisionDefinition.bTrailUseTrueLength));
+						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand, a_collisionDefinition.bTrailUseTrueLength, a_collisionDefinition.trailOverride));
 					}
 				}
 
@@ -76,6 +76,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 			ID = a_collisionDefinition.ID;
 			bNoRecoil = a_collisionDefinition.bNoRecoil;
 			damageMult = a_collisionDefinition.damageMult;
+			groundShake = a_collisionDefinition.groundShake;
 
 			lifetime = a_collisionDefinition.duration;
 			if (a_collisionDefinition.duration) {

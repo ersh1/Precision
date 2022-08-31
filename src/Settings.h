@@ -3,6 +3,49 @@
 #include <Simpleini.h>
 #include <unordered_set>
 
+struct TrailOverride
+{
+	TrailOverride() = default;
+
+	TrailOverride(std::optional<float> a_lifetimeMult,
+		std::optional<RE::NiColorA> a_baseColorOverride,
+		std::optional<float> a_baseColorScaleMult,
+		std::optional<std::string> a_meshOverride) :
+		lifetimeMult(a_lifetimeMult), baseColorOverride(a_baseColorOverride), baseColorScaleMult(a_baseColorScaleMult), meshOverride(a_meshOverride)
+	{}
+
+	std::optional<float> lifetimeMult;
+	std::optional<RE::NiColorA> baseColorOverride;
+	std::optional<float> baseColorScaleMult;
+	std::optional<std::string> meshOverride;
+};
+
+struct TrailDefinition
+{
+	TrailDefinition() = default;
+
+	TrailDefinition(int32_t a_priority,
+		std::optional<std::vector<std::string>> a_weaponNames,
+		std::optional<std::vector<std::string>> a_weaponKeywords,
+		std::optional<std::vector<std::string>> a_enchantmentNames,
+		std::optional<std::vector<std::string>> a_effectNames,
+		std::optional<std::vector<std::string>> a_effectKeywords,
+		std::optional<std::vector<RE::TESEffectShader*>> a_effectShaders,
+		TrailOverride& a_trailOverride) :
+		priority(a_priority),
+		weaponNames(a_weaponNames), weaponKeywords(a_weaponKeywords), enchantmentNames(a_enchantmentNames), effectNames(a_effectNames), effectKeywords(a_effectKeywords), effectShaders(a_effectShaders), trailOverride(a_trailOverride)
+	{}
+
+	int32_t priority;
+	std::optional<std::vector<std::string>> weaponNames;
+	std::optional<std::vector<std::string>> weaponKeywords;
+	std::optional<std::vector<std::string>> enchantmentNames;
+	std::optional<std::vector<std::string>> effectNames;
+	std::optional<std::vector<std::string>> effectKeywords;
+	std::optional<std::vector<RE::TESEffectShader*>> effectShaders;
+	TrailOverride trailOverride;
+};
+
 struct CollisionDefinition
 {
 	CollisionDefinition() = default;
@@ -21,9 +64,11 @@ struct CollisionDefinition
 		std::optional<float> a_radiusMult = std::nullopt,
 		std::optional<float> a_capsuleLength = std::nullopt,
 		std::optional<float> a_lengthMult = std::nullopt,
-		std::optional<RE::NiTransform> a_transform = std::nullopt) :
+		std::optional<RE::NiTransform> a_transform = std::nullopt,
+		std::optional<RE::NiPoint3> a_groundShake = std::nullopt,
+		std::optional<TrailOverride> a_trailOverride = std::nullopt) :
 		nodeName(a_nodeName),
-		ID(a_ID), bNoRecoil(a_bNoRecoil), bNoTrail(a_bNoTrail), bTrailUseTrueLength(a_bTrailUseTrueLength), bWeaponTip(a_bWeaponTip), damageMult(a_damageMult), duration(a_duration), durationMult(a_durationMult), delay(a_delay), capsuleRadius(a_capsuleRadius), radiusMult(a_radiusMult), capsuleLength(a_capsuleLength), lengthMult(a_lengthMult), transform(a_transform)
+		ID(a_ID), bNoRecoil(a_bNoRecoil), bNoTrail(a_bNoTrail), bTrailUseTrueLength(a_bTrailUseTrueLength), bWeaponTip(a_bWeaponTip), damageMult(a_damageMult), duration(a_duration), durationMult(a_durationMult), delay(a_delay), capsuleRadius(a_capsuleRadius), radiusMult(a_radiusMult), capsuleLength(a_capsuleLength), lengthMult(a_lengthMult), transform(a_transform), groundShake(a_groundShake), trailOverride(a_trailOverride)
 	{}
 
 	std::string nodeName;
@@ -41,48 +86,27 @@ struct CollisionDefinition
 	std::optional<float> capsuleLength;
 	std::optional<float> lengthMult;
 	std::optional<RE::NiTransform> transform;
+	std::optional<RE::NiPoint3> groundShake;
+	std::optional<TrailOverride> trailOverride;
 };
 
 struct AttackDefinition
 {
+	enum class SwingEvent : uint8_t
+	{
+		kWeaponSwing = 0,
+		kPreHitFrame = 1,
+		kCastOKStart = 2,
+		kCastOKStop = 3
+	};
 	AttackDefinition() = default;
 
-	AttackDefinition(std::vector<CollisionDefinition> a_collisions) :
-		collisions(a_collisions)
+	AttackDefinition(std::vector<CollisionDefinition> a_collisions, SwingEvent a_swingEvent) :
+		collisions(a_collisions), swingEvent(a_swingEvent)
 	{}
 
 	std::vector<CollisionDefinition> collisions;
-};
-
-struct TrailDefinition
-{
-	TrailDefinition() = default;
-
-	TrailDefinition(int32_t a_priority,
-		std::optional<std::vector<std::string>> a_weaponNames,
-		std::optional<std::vector<std::string>> a_weaponKeywords,
-		std::optional<std::vector<std::string>> a_enchantmentNames,
-		std::optional<std::vector<std::string>> a_effectNames,
-		std::optional<std::vector<std::string>> a_effectKeywords,
-		std::optional<std::vector<RE::TESEffectShader*>> a_effectShaders,
-		std::optional<float> a_lifetimeMult,
-		std::optional<RE::NiColorA> a_baseColorOverride,
-		std::optional<float> a_baseColorScaleMult,
-		std::optional<std::string> a_trailMeshOverride) :
-		priority(a_priority), weaponNames(a_weaponNames), weaponKeywords(a_weaponKeywords), enchantmentNames(a_enchantmentNames), effectNames(a_effectNames), effectKeywords(a_effectKeywords), effectShaders(a_effectShaders), lifetimeMult(a_lifetimeMult), baseColorOverride(a_baseColorOverride), baseColorScaleMult(a_baseColorScaleMult), trailMeshOverride(a_trailMeshOverride)
-	{}
-	
-	int32_t priority;
-	std::optional<std::vector<std::string>> weaponNames;
-	std::optional<std::vector<std::string>> weaponKeywords;
-	std::optional<std::vector<std::string>> enchantmentNames;
-	std::optional<std::vector<std::string>> effectNames;
-	std::optional<std::vector<std::string>> effectKeywords;
-	std::optional<std::vector<RE::TESEffectShader*>> effectShaders;
-	std::optional<float> lifetimeMult;
-	std::optional<RE::NiColorA> baseColorOverride;
-	std::optional<float> baseColorScaleMult;
-	std::optional<std::string> trailMeshOverride;
+	SwingEvent swingEvent = SwingEvent::kWeaponSwing;
 };
 
 enum class SweepAttackMode : std::uint32_t
@@ -125,6 +149,7 @@ struct Settings
 	static inline uint32_t uMaxTargetsNoSweepAttack = 1;
 	static inline uint32_t uMaxTargetsSweepAttack = 0;
 	static inline float fSweepAttackDiminishingReturnsFactor = 0.5f;
+	static inline float fGroundFeetDistanceThreshold = 30.f;
 
 	// Trails
 	static inline bool bDisplayTrails = true;
@@ -146,7 +171,6 @@ struct Settings
 	static inline float fHitstopDurationPowerAttackMultiplier = 1.3f;
 	static inline float fHitstopDurationTwoHandedMultiplier = 1.2f;
 	static inline float fHitstopDurationDiminishingReturnsFactor = 0.5f;
-	static inline float fHitstopGroundFeetDistanceThreshold = 40.f;
 
 	static inline bool bEnableHitstopCameraShake = true;
 	static inline float fHitstopCameraShakeStrengthNPC = 6.f;
@@ -157,7 +181,6 @@ struct Settings
 	static inline float fHitstopCameraShakePowerAttackMultiplier = 1.3f;
 	static inline float fHitstopCameraShakeTwoHandedMultiplier = 1.2f;
 	static inline float fHitstopCameraShakeDurationDiminishingReturnsFactor = 0.5f;
-	static inline float fHitstopCameraShakeGroundFeetDistanceThreshold = 40.f;
 
 	// Recoil
 	static inline bool bRecoilPlayer = true;
@@ -166,7 +189,6 @@ struct Settings
 	static inline bool bUseVanillaRecoil = false;
 	static inline float fRecoilFirstPersonDistanceThreshold = 80.f;
 	static inline float fRecoilThirdPersonDistanceThreshold = 20.f;
-	static inline float fRecoilGroundFeetDistanceThreshold = 40.f;
 
 	static inline bool bEnableRecoilCameraShake = true;
 	static inline float fRecoilCameraShakeStrength = 10.f;
@@ -250,9 +272,16 @@ struct Settings
 	static inline uint32_t iPrecisionLayerIndex = 56;
 	//static inline uint64_t iPrecisionLayerBitfield = 0x53343561B7FFF;  // same as L_WEAPON layer
 	static inline uint64_t iPrecisionLayerBitfield = 0x1053343561B7FFF;  // same as L_WEAPON layer, but + self-collision (layer 56)
+	static inline uint64_t iBipedLayerBitfield = 0x407BC01C037A8F;  // same as L_BIPED layer
 
 	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitions;
+	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitionsPreHitFrame;
+	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitionsCastOKStart;
+	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitionsCastOKStop;
 	static inline std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>> attackAnimationDefinitions;
+	static inline std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>> attackAnimationDefinitionsPreHitFrame;
+	static inline std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>> attackAnimationDefinitionsCastOKStart;
+	static inline std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>> attackAnimationDefinitionsCastOKStop;
 	static inline std::vector<TrailDefinition> trailDefinitionsAny;
 	static inline std::vector<TrailDefinition> trailDefinitionsAll;
 	static inline std::vector<std::pair<std::string, std::string>> attackEventPairs;
@@ -271,6 +300,9 @@ struct Settings
 	static inline float defaultMeshLengthOneHandMace = 48.3f;
 	static inline float defaultMeshLengthTwoHandSword = 95.f;
 	static inline float defaultMeshLengthTwoHandAxe = 56.5f;
+	
+	static inline float cameraShakeRadiusSquared = 2000000.f;
+	static inline RE::NiPoint3 cameraShakeAxis = { 1.f, 0.f, 0.f };
 
 	static inline RE::TESGlobal* glob_nemesis = nullptr;
 };

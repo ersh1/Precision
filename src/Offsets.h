@@ -127,8 +127,8 @@ static REL::Relocation<thkbBlendPoses> hkbBlendPoses{ RELOCATION_ID(63192, 64112
 typedef RE::hkaRagdollInstance* (*thkbRagdollDriver_getRagdoll)(RE::hkbRagdollDriver* a_this);
 static REL::Relocation<thkbRagdollDriver_getRagdoll> hkbRagdollDriver_getRagdoll{ RELOCATION_ID(57718, 58286) };  // 9EAD10, A0F520
 
-typedef RE::NiAVObject* (*tGetNodeFromCollidable)(const RE::hkpCollidable* a_collidable);
-static REL::Relocation<tGetNodeFromCollidable> GetNodeFromCollidable{ RELOCATION_ID(76160, 77988) };  // DAD060, DECF20
+typedef RE::NiAVObject* (*tGetNiObjectFromCollidable)(const RE::hkpCollidable* a_collidable);
+static REL::Relocation<tGetNiObjectFromCollidable> GetNiObjectFromCollidable{ RELOCATION_ID(76160, 77988) };  // DAD060, DECF20
 
 typedef void (*tbhkRigidBody_setMotionType)(RE::bhkRigidBody* a_this, RE::hkpMotion::MotionType a_newState, RE::hkpEntityActivation a_preferredActivationState, RE::hkpUpdateCollisionFilterOnEntityMode a_collisionFilterUpdateMode);
 static REL::Relocation<tbhkRigidBody_setMotionType> bhkRigidBody_setMotionType{ RELOCATION_ID(76247, 78077) };  // DB30C0, DF37F0

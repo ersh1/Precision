@@ -6,6 +6,7 @@ namespace Messaging
 	using APIResult = ::PRECISION_API::APIResult;
 	using InterfaceVersion1 = ::PRECISION_API::IVPrecision1;
 	using InterfaceVersion2 = ::PRECISION_API::IVPrecision2;
+	using InterfaceVersion3 = ::PRECISION_API::IVPrecision3;
 	using PreHitCallback = ::PRECISION_API::PreHitCallback;
 	using PostHitCallback = ::PRECISION_API::PostHitCallback;
 	using PrePhysicsStepCallback = ::PRECISION_API::PrePhysicsStepCallback;
@@ -13,8 +14,10 @@ namespace Messaging
 	using RequestedAttackCollisionType = ::PRECISION_API::RequestedAttackCollisionType;
 	using WeaponCollisionCallback = ::PRECISION_API::WeaponCollisionCallback;
 	using WeaponCollisionCallbackReturn = ::PRECISION_API::WeaponCollisionCallbackReturn;
+	using CollisionFilterSetupCallback = ::PRECISION_API::CollisionFilterSetupCallback;
+	using ContactListenerCallback = ::PRECISION_API::ContactListenerCallback;
 
-	class PrecisionInterface : public InterfaceVersion2
+	class PrecisionInterface : public InterfaceVersion3
 	{
 	private:
 		PrecisionInterface() = default;
@@ -49,5 +52,17 @@ namespace Messaging
 		virtual APIResult AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback&& a_callback) noexcept override;
 		virtual APIResult RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;
 		virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept override;
+
+		// InterfaceVersion3
+		virtual APIResult AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback&& a_callback) noexcept override;
+		virtual APIResult RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;
+		virtual APIResult AddContactListenerCallback(SKSE::PluginHandle a_pluginHandle, ContactListenerCallback&& a_callback) noexcept override;
+		virtual APIResult RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;		
+		virtual bool IsActorActive(RE::ActorHandle a_actorHandle) const noexcept override;
+		virtual bool IsActorActiveCollisionGroup(uint16_t a_collisionGroup) const noexcept override;
+		virtual bool IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle) const noexcept override;
+		virtual bool IsCharacterControllerHittable(RE::bhkCharacterController* a_characterController) const noexcept override;
+		virtual bool IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup) const noexcept override;
+		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept override;		
 	};
 }

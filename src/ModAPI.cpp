@@ -121,4 +121,70 @@ namespace Messaging
 		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_actorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true);
 	}
 
+	APIResult PrecisionInterface::AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback&& a_callback) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->AddCollisionFilterSetupCallback(a_pluginHandle, a_callback)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::AlreadyRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->RemoveCollisionFilterSetupCallback(a_pluginHandle)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::NotRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::AddContactListenerCallback(SKSE::PluginHandle a_pluginHandle, ContactListenerCallback&& a_callback) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->AddContactListenerCallback(a_pluginHandle, a_callback)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::AlreadyRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->RemoveContactListenerCallback(a_pluginHandle)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::NotRegistered;
+		}
+	}
+
+	bool PrecisionInterface::IsActorActive(RE::ActorHandle a_actorHandle) const noexcept
+	{
+		return PrecisionHandler::IsActorActive(a_actorHandle);
+	}
+
+	bool PrecisionInterface::IsActorActiveCollisionGroup(uint16_t a_collisionGroup) const noexcept
+	{
+		return PrecisionHandler::IsActorActiveCollisionGroup(a_collisionGroup);
+	}
+
+	bool PrecisionInterface::IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle) const noexcept
+	{
+		return PrecisionHandler::IsActorCharacterControllerHittable(a_actorHandle);
+	}
+
+	bool PrecisionInterface::IsCharacterControllerHittable(RE::bhkCharacterController* a_characterController) const noexcept
+	{
+		return PrecisionHandler::IsCharacterControllerHittable(a_characterController);
+	}
+
+	bool PrecisionInterface::IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup) const noexcept
+	{
+		return PrecisionHandler::IsCharacterControllerHittableCollisionGroup(a_collisionGroup);
+	}
+
+	bool PrecisionInterface::ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept
+	{
+		return PrecisionHandler::ToggleDisableActor(a_actorHandle, a_bDisable);
+	}
+
 }

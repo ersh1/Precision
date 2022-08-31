@@ -237,7 +237,7 @@ namespace Hooks
 	{
 		_CullActors(a_this, a_actor);
 
-		if (!PrecisionHandler::activeActors.contains(a_actor->GetHandle())) {
+		if (!PrecisionHandler::GetSingleton()->IsActorActive(a_actor->GetHandle())) {
 			return;
 		}
 
@@ -297,11 +297,7 @@ namespace Hooks
 
 			//}
 
-			PrecisionHandler::activeActors.clear();
-			PrecisionHandler::activeRagdolls.clear();
-			PrecisionHandler::hittableCharControllerGroups.clear();
-			PrecisionHandler::ragdollCollisionGroups.clear();
-			PrecisionHandler::contactListener = ContactListener{};
+			PrecisionHandler::GetSingleton()->Clear();
 
 			// Havok world changed
 			{
@@ -313,14 +309,18 @@ namespace Hooks
 					hkpCollisionCallbackUtil_requireCollisionCallbackUtil(world->GetWorld2());
 					hkpWorld_addContactListener(world->GetWorld2(), contactListener);
 					//hkpWorld_addWorldPostSimulationListener(world->GetWorld2(), &PrecisionHandler::contactListener);
-				}				
+				}
 
 				RE::bhkCollisionFilter* filter = static_cast<RE::bhkCollisionFilter*>(world->GetWorld2()->collisionFilter);
 
-				// disable biped collision with anything
-				filter->layerBitfields[static_cast<uint8_t>(CollisionLayer::kBiped)] = 0;
+				// disable original biped collisions
+				filter->layerBitfields[static_cast<uint8_t>(CollisionLayer::kBiped)] &= ~Settings::iBipedLayerBitfield;
+
 				// enable biped Precision collision
 				filter->layerBitfields[static_cast<uint8_t>(CollisionLayer::kBiped)] |= (static_cast<uint64_t>(1) << static_cast<uint64_t>(CollisionLayer::kPrecision));
+
+				// run callbacks from other plugins
+				PrecisionHandler::GetSingleton()->RunCollisionFilterSetupCallbacks(filter);
 
 				ReSyncLayerBitfields(filter, CollisionLayer::kBiped);
 			}
@@ -377,18 +377,22 @@ namespace Hooks
 				}
 				uint16_t collisionGroup = filterInfo >> 16;
 				
-				auto& hittableCharControllerGroups = PrecisionHandler::hittableCharControllerGroups;
 				auto& ragdollCollisionGroups = PrecisionHandler::ragdollCollisionGroups;
 
-				bool bIsHittableCharController = hittableCharControllerGroups.size() > 0 && hittableCharControllerGroups.contains(collisionGroup);
+				bool bIsHittableCharController = PrecisionHandler::IsCharacterControllerHittableCollisionGroup(collisionGroup);
+				
 				bool bIsRagdollCollision = ragdollCollisionGroups.size() > 0 && ragdollCollisionGroups.contains(collisionGroup);
 
-				bool bShouldAddToWorld = !Settings::bDisableMod && actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
-				bool bShouldRemoveFromWorld = Settings::bDisableMod || actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
+				bool bIsActorDisabled = PrecisionHandler::IsActorDisabled(actorHandle);
+
+				bool bShouldAddToWorld = !Settings::bDisableMod && !bIsActorDisabled && actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
+				bool bShouldRemoveFromWorld = Settings::bDisableMod || bIsActorDisabled || actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
 
 				bool bIsAddedToWorld = IsAddedToWorld(actorHandle);
-				auto& activeActors = PrecisionHandler::activeActors;
-				bool bIsActiveActor = activeActors.contains(actorHandle) || bIsHittableCharController;
+
+				bool bActiveActorsContainsHandle = PrecisionHandler::IsActorActive(actorHandle);
+
+				bool bIsActiveActor = bActiveActorsContainsHandle || bIsHittableCharController;
 				bool bCanAddToWorld = CanAddToWorld(actorHandle);
 
 				if (bShouldAddToWorld) {
@@ -403,12 +407,14 @@ namespace Hooks
 							if (bIsHittableCharController) {
 								// The character previously wasn't passing the conditions for being added to the world, and has been added as a hittable char controller,
 								// but now it was added as a ragdoll.
-								hittableCharControllerGroups.erase(collisionGroup);
+								WriteLocker locker(PrecisionHandler::hittableCharControllerGroupsLock);
+								PrecisionHandler::hittableCharControllerGroups.erase(collisionGroup);
 							}
 						} else {
 							// There is no ragdoll instance, but we still need a way to hit the enemy, e.g. for the wisp (witchlight).
 							// In this case, we need to register collisions against their charcontroller.
-							hittableCharControllerGroups.insert(collisionGroup);
+							WriteLocker locker(PrecisionHandler::hittableCharControllerGroupsLock);
+							PrecisionHandler::hittableCharControllerGroups.insert(collisionGroup);
 						}
 						if (actorHandle.native_handle() == 0x100000) {
 							PrecisionHandler::AddPlayerSink();
@@ -422,10 +428,11 @@ namespace Hooks
 						if (bIsRagdollCollision) {
 							ragdollCollisionGroups.erase(collisionGroup);
 						}
-						hittableCharControllerGroups.insert(collisionGroup);						
+						WriteLocker locker(PrecisionHandler::hittableCharControllerGroupsLock);
+						PrecisionHandler::hittableCharControllerGroups.insert(collisionGroup);						
 					}
 
-					if (activeActors.size() > 0 && activeActors.contains(actorHandle)) {
+					if (bActiveActorsContainsHandle) {
 						// Sometimes the game re-enables sync-on-update e.g. when switching outfits, so we need to make sure it's disabled.
 						DisableSyncOnUpdate(actor);
 
@@ -443,7 +450,8 @@ namespace Hooks
 							}
 						} else {
 							if (bIsHittableCharController) {
-								hittableCharControllerGroups.erase(collisionGroup);
+								WriteLocker locker(PrecisionHandler::hittableCharControllerGroupsLock);
+								PrecisionHandler::hittableCharControllerGroups.erase(collisionGroup);
 							}
 						}
 
@@ -814,7 +822,18 @@ namespace Hooks
 				for (auto& graph : animGraphManager->graphs) {
 					auto& driver = graph->characterInstance.ragdollDriver;
 					if (driver) {
-						PrecisionHandler::activeActors.emplace(a_actorHandle);
+						{
+							WriteLocker locker(PrecisionHandler::activeActorsLock);
+							PrecisionHandler::activeActors.emplace(a_actorHandle);
+
+							uint32_t filterInfo = 0;
+							auto charController = actor->GetCharController();
+							if (charController) {
+								charController->GetCollisionFilterInfo(filterInfo);
+								uint16_t collisionGroup = filterInfo >> 16;
+								PrecisionHandler::activeControllerGroups.emplace(collisionGroup);
+							}
+						}
 
 						auto activeRagdoll = std::make_shared<ActiveRagdoll>();
 						PrecisionHandler::activeRagdolls.emplace(driver.get(), activeRagdoll);
@@ -890,7 +909,17 @@ namespace Hooks
 						}
 
 						PrecisionHandler::activeRagdolls.erase(driver.get());
+
+						WriteLocker locker(PrecisionHandler::activeActorsLock);
 						PrecisionHandler::activeActors.erase(a_actorHandle);
+
+						uint32_t filterInfo = 0;
+						auto charController = actor->GetCharController();
+						if (charController) {
+							charController->GetCollisionFilterInfo(filterInfo);
+							uint16_t collisionGroup = filterInfo >> 16;
+							PrecisionHandler::activeControllerGroups.erase(collisionGroup);
+						}
 					}
 				}
 			}
@@ -910,7 +939,7 @@ namespace Hooks
 			}
 
 			for (RE::hkpRigidBody* rigidBody : ragdoll->rigidBodies) {
-				auto node = GetNodeFromCollidable(rigidBody->GetCollidable());
+				auto node = GetNiObjectFromCollidable(rigidBody->GetCollidable());
 				if (node) {
 					auto wrapper = Utils::GetRigidBody(node);
 					if (wrapper) {
@@ -925,7 +954,7 @@ namespace Hooks
 			if (Settings::bConvertHingeConstraintsToRagdollConstraints) {
 				// Convert any limited hinge constraints to ragdoll constraints so that they can be loosened properly
 				for (RE::hkpRigidBody* rigidBody : ragdoll->rigidBodies) {
-					auto node = GetNodeFromCollidable(rigidBody->GetCollidable());
+					auto node = GetNiObjectFromCollidable(rigidBody->GetCollidable());
 					if (node) {
 						auto wrapper = Utils::GetRigidBody(node);
 						if (wrapper) {
@@ -1037,6 +1066,13 @@ namespace Hooks
 		if (!ragdoll) {
 			return;
 		}
+
+		RE::BSAnimationGraphManagerPtr animGraphManager;
+		if (!actor->GetAnimationGraphManager(animGraphManager)) {
+			return;
+		}
+
+		RE::BSSpinLockGuard(animGraphManager->updateLock);
 
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 		RE::hkbGeneratorOutput::TrackHeader* worldFromModelHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_WORLD_FROM_MODEL);
@@ -1234,7 +1270,7 @@ namespace Hooks
 			if (auto controller = actor->GetCharController()) {
 				if (poseHeader && poseHeader->onFraction > 0.f && worldFromModelHeader && worldFromModelHeader->onFraction > 0.f) {
 					if (auto firstRb = Utils::GetFirstRigidBody(root)) {
-						auto collNode = GetNodeFromCollidable(&static_cast<RE::hkpRigidBody*>(firstRb->referencedObject.get())->collidable);
+						auto collNode = GetNiObjectFromCollidable(&static_cast<RE::hkpRigidBody*>(firstRb->referencedObject.get())->collidable);
 
 						int boneIndex = Utils::GetAnimBoneIndex(a_driver->character, collNode->name);
 						if (boneIndex >= 0) {
@@ -1311,13 +1347,22 @@ namespace Hooks
 		if (!ragdoll->isOn)
 			return;
 
-		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
-		if (poseHeader && poseHeader->onFraction > 0.f) {
-			int numPoses = poseHeader->numData;
-			RE::hkQsTransform* animPose = (RE::hkQsTransform*)Track_getData(a_generatorInOut, *poseHeader);
-			// Copy anim pose track before postPhysics() as postPhysics() will overwrite it with the ragdoll pose
-			ragdoll->animPose.assign(animPose, animPose + numPoses);
+		RE::BSAnimationGraphManagerPtr animGraphManager;
+		if (!actor->GetAnimationGraphManager(animGraphManager)) {
+			return;
 		}
+		
+		{
+			RE::BSSpinLockGuard(animGraphManager->updateLock);
+
+			RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
+			if (poseHeader && poseHeader->onFraction > 0.f) {
+				int numPoses = poseHeader->numData;
+				RE::hkQsTransform* animPose = (RE::hkQsTransform*)Track_getData(a_generatorInOut, *poseHeader);
+				// Copy anim pose track before postPhysics() as postPhysics() will overwrite it with the ragdoll pose
+				ragdoll->animPose.assign(animPose, animPose + numPoses);
+			}
+		}		
 
 		if (Settings::bDisableGravityForActiveRagdolls) {
 			if (!actor->IsInRagdollState() && !Utils::IsActorGettingUp(actor)) {
@@ -1347,6 +1392,13 @@ namespace Hooks
 			return;
 
 		RagdollState state = ragdoll->state;
+
+		RE::BSAnimationGraphManagerPtr animGraphManager;
+		if (!actor->GetAnimationGraphManager(animGraphManager)) {
+			return;
+		}
+		
+		RE::BSSpinLockGuard(animGraphManager->updateLock);
 
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 
@@ -1492,9 +1544,9 @@ namespace Hooks
 			uint16_t groupA = a_filterInfoA >> 16;
 			uint16_t groupB = a_filterInfoB >> 16;
 
-			auto& hittableCharControllerGroups = PrecisionHandler::hittableCharControllerGroups;
 			auto& ragdollCollisionGroups = PrecisionHandler::ragdollCollisionGroups;
-			bool bIsHittableCharController = hittableCharControllerGroups.size() > 0 && (hittableCharControllerGroups.contains(groupA) || hittableCharControllerGroups.contains(groupB));
+
+			bool bIsHittableCharController = PrecisionHandler::IsCharacterControllerHittableCollisionGroup(groupA) || PrecisionHandler::IsCharacterControllerHittableCollisionGroup(groupB);
 			bool bIsRagdollCollision = ragdollCollisionGroups.size() > 0 && (ragdollCollisionGroups.contains(groupA) || ragdollCollisionGroups.contains(groupB));
 
 			if (bIsHittableCharController) {
@@ -1511,7 +1563,7 @@ namespace Hooks
 		// One of the collidees is a character controller
 
 		uint32_t charControllerFilter = layerA == CollisionLayer::kCharController ? a_filterInfoA : a_filterInfoB;
-		uint16_t group = charControllerFilter >> 16;
+		uint16_t charControllerGroup = charControllerFilter >> 16;
 
 		uint32_t otherFilter = charControllerFilter == a_filterInfoA ? a_filterInfoB : a_filterInfoA;
 		CollisionLayer otherLayer = static_cast<CollisionLayer>(otherFilter & 0x7f);
@@ -1524,10 +1576,7 @@ namespace Hooks
 			}
 		}
 
-		auto& hittableCharControllerGroups = PrecisionHandler::hittableCharControllerGroups;
-		bool bIsHittableCharController = hittableCharControllerGroups.size() > 0 && hittableCharControllerGroups.contains(group);
-
-		if (bIsHittableCharController) {
+		if (PrecisionHandler::IsCharacterControllerHittableCollisionGroup(charControllerGroup)) {
 			return CollisionFilterComparisonResult::Continue;
 		}
 
@@ -1543,9 +1592,9 @@ namespace Hooks
 	{
 		_TESCamera_Update(a_this);
 
-		if ((Settings::bEnableHitstopCameraShake || Settings::bEnableRecoilCameraShake) && PrecisionHandler::currentCameraShake) {
+		if ((Settings::bEnableHitstopCameraShake || Settings::bEnableRecoilCameraShake) && PrecisionHandler::bCameraShakeActive) {
 			//a_this->cameraRoot->local.translate += PrecisionHandler::currentCameraShakeAxis * PrecisionHandler::currentCameraShake;
-			a_this->cameraRoot->local.rotate = a_this->cameraRoot->local.rotate * Utils::MatrixFromAxisAngle(PrecisionHandler::currentCameraShakeAxis, PrecisionHandler::currentCameraShake * 0.001f);
+			a_this->cameraRoot->local.rotate = a_this->cameraRoot->local.rotate * Utils::MatrixFromAxisAngle(Settings::cameraShakeAxis, PrecisionHandler::currentCameraShake * 0.001f);
 
 			RE::NiUpdateData updateData;
 			a_this->cameraRoot->UpdateDownwardPass(updateData, 0);

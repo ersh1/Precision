@@ -154,7 +154,28 @@ void Settings::ReadSettings()
 			}
 		}
 
-		a_collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bTrailUseTrueLength, bWeaponTip, damageMult, duration, durationMult, delay, radius, radiusMult, length, lengthMult, transform);
+		std::optional<RE::NiPoint3> groundShake;
+		{
+			auto groundShakeTbl = a_collisionTable["GroundShake"].as_table();
+			if (groundShakeTbl) {
+				groundShake = RE::NiPoint3();
+				
+				auto strength = groundShakeTbl->get("Strength");
+				if (strength) {
+					groundShake->x = *strength->value<float>();
+				}
+				auto shakeDuration = groundShakeTbl->get("Duration");
+				if (shakeDuration) {
+					groundShake->y = *shakeDuration->value<float>();
+				}
+				auto frequency = groundShakeTbl->get("Frequency");
+				if (frequency) {
+					groundShake->z = *frequency->value<float>();
+				}
+			}
+		}
+
+		a_collisionDefs.emplace_back(*nodeName, ID, bNoRecoil, bNoTrail, bTrailUseTrueLength, bWeaponTip, damageMult, duration, durationMult, delay, radius, radiusMult, length, lengthMult, transform, groundShake, std::nullopt);
 	};
 
 	const auto readToml = [&](std::filesystem::path path) {
@@ -165,6 +186,7 @@ void Settings::ReadSettings()
 			if (attackDefinitionsArr) {
 				for (auto&& elem : *attackDefinitionsArr) {
 					auto& definitionsTbl = *elem.as_table();
+
 					auto formIDs = definitionsTbl["BodyPartDataFormIDs"].as_array();
 					if (formIDs) {
 						for (auto& formIDEntry : *formIDs) {
@@ -172,13 +194,30 @@ void Settings::ReadSettings()
 							auto pluginName = definitionsTbl["Plugin"].value<std::string_view>();
 							auto bodyPartData = dataHandler->LookupForm<RE::BGSBodyPartData>(*formID, *pluginName);
 							if (bodyPartData) {
-								auto& attackDefs = attackRaceDefinitions[bodyPartData];
-
 								auto attacksArr = definitionsTbl["Attacks"].as_array();
 								if (attacksArr) {
 									for (auto&& attackEntry : *attacksArr) {
 										// read attack
 										auto& attackTbl = *attackEntry.as_table();
+
+										// read swing event
+										AttackDefinition::SwingEvent swingEvent = AttackDefinition::SwingEvent::kWeaponSwing;
+										auto swingEventVal = attackTbl["SwingEvent"].value<std::string_view>();
+										if (swingEventVal) {
+											auto& swingEventSv = *swingEventVal;
+											std::string swingEventStr{ swingEventSv };
+											std::transform(swingEventStr.begin(), swingEventStr.end(), swingEventStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+
+											if (swingEventStr == "weaponswing"sv) {
+												swingEvent = AttackDefinition::SwingEvent::kWeaponSwing;
+											} else if (swingEventStr == "prehitframe"sv) {
+												swingEvent = AttackDefinition::SwingEvent::kPreHitFrame;
+											} else if (swingEventStr == "castokstart"sv) {
+												swingEvent = AttackDefinition::SwingEvent::kCastOKStart;
+											} else if (swingEventStr == "castokstop"sv) {
+												swingEvent = AttackDefinition::SwingEvent::kCastOKStop;
+											}
+										}
 
 										// event name
 										auto eventNames = attackTbl["EventNames"].as_array();
@@ -195,7 +234,20 @@ void Settings::ReadSettings()
 														readCollision(*collisionEntry.as_table(), collisionDefs);
 													}
 
-													attackDefs.emplace(*eventName, AttackDefinition(collisionDefs));
+													switch (swingEvent) {
+													case AttackDefinition::SwingEvent::kWeaponSwing:
+														attackRaceDefinitions[bodyPartData].emplace(*eventName, AttackDefinition(collisionDefs, swingEvent));
+														break;
+													case AttackDefinition::SwingEvent::kPreHitFrame:
+														attackRaceDefinitionsPreHitFrame[bodyPartData].emplace(*eventName, AttackDefinition(collisionDefs, swingEvent));
+														break;
+													case AttackDefinition::SwingEvent::kCastOKStart:
+														attackRaceDefinitionsCastOKStart[bodyPartData].emplace(*eventName, AttackDefinition(collisionDefs, swingEvent));
+														break;
+													case AttackDefinition::SwingEvent::kCastOKStop:
+														attackRaceDefinitionsCastOKStop[bodyPartData].emplace(*eventName, AttackDefinition(collisionDefs, swingEvent));
+														break;
+													}
 												}
 											}
 										}
@@ -211,6 +263,7 @@ void Settings::ReadSettings()
 			if (attackAnimationDefinitionsArr) {
 				for (auto&& elem : *attackAnimationDefinitionsArr) {
 					auto& attackAnimationDefinitionsTbl = *elem.as_table();
+										
 					auto projectNames = attackAnimationDefinitionsTbl["ProjectNames"].as_array();
 					if (projectNames) {
 						for (auto& projectNameEntry : *projectNames) {
@@ -219,8 +272,6 @@ void Settings::ReadSettings()
 								auto& projectNameSv = *projectName;
 								std::string projectNameStr{ projectNameSv };
 								std::transform(projectNameStr.begin(), projectNameStr.end(), projectNameStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
-
-								auto& attackDefs = attackAnimationDefinitions[projectNameStr.data()];
 
 								auto attacksArr = attackAnimationDefinitionsTbl["Attacks"].as_array();
 								if (attacksArr) {
@@ -235,6 +286,25 @@ void Settings::ReadSettings()
 											std::string animationFilePathStr{ animationFilePathSv };
 											std::transform(animationFilePathStr.begin(), animationFilePathStr.end(), animationFilePathStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
 											std::replace(animationFilePathStr.begin(), animationFilePathStr.end(), '\\', '/');
+
+											// read swing event
+											AttackDefinition::SwingEvent swingEvent = AttackDefinition::SwingEvent::kWeaponSwing;
+											auto swingEventVal = attackTbl["SwingEvent"].value<std::string_view>();
+											if (swingEventVal) {
+												auto& swingEventSv = *swingEventVal;
+												std::string swingEventStr{ swingEventSv };
+												std::transform(swingEventStr.begin(), swingEventStr.end(), swingEventStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+
+												if (swingEventStr == "weaponswing"sv) {
+													swingEvent = AttackDefinition::SwingEvent::kWeaponSwing;
+												} else if (swingEventStr == "prehitframe"sv) {
+													swingEvent = AttackDefinition::SwingEvent::kPreHitFrame;
+												} else if (swingEventStr == "castokstart"sv) {
+													swingEvent = AttackDefinition::SwingEvent::kCastOKStart;
+												} else if (swingEventStr == "castokstop"sv) {
+													swingEvent = AttackDefinition::SwingEvent::kCastOKStop;
+												}
+											}
 											
 											// read collision
 											auto collisionArr = attackTbl["Collisions"].as_array();
@@ -245,7 +315,20 @@ void Settings::ReadSettings()
 													readCollision(*collisionEntry.as_table(), collisionDefs);
 												}
 
-												attackDefs.emplace(animationFilePathStr, AttackDefinition(collisionDefs));
+												switch (swingEvent) {
+												case AttackDefinition::SwingEvent::kWeaponSwing:
+													attackAnimationDefinitions[projectNameStr.data()].emplace(animationFilePathStr, AttackDefinition(collisionDefs, swingEvent));
+													break;
+												case AttackDefinition::SwingEvent::kPreHitFrame:
+													attackAnimationDefinitionsPreHitFrame[projectNameStr.data()].emplace(animationFilePathStr, AttackDefinition(collisionDefs, swingEvent));
+													break;
+												case AttackDefinition::SwingEvent::kCastOKStart:
+													attackAnimationDefinitionsCastOKStart[projectNameStr.data()].emplace(animationFilePathStr, AttackDefinition(collisionDefs, swingEvent));
+													break;
+												case AttackDefinition::SwingEvent::kCastOKStop:
+													attackAnimationDefinitionsCastOKStop[projectNameStr.data()].emplace(animationFilePathStr, AttackDefinition(collisionDefs, swingEvent));
+													break;
+												}
 											}
 										}
 									}
@@ -369,11 +452,13 @@ void Settings::ReadSettings()
 
 					if (bHasWeaponName || bHasWeaponKeyword || bHasEnchantmentName || bHasEffectName || bHasEffectKeyword || bHasEffectShader) {
 
+						TrailOverride trailOverride{};
+
 						// conditions
 						auto& trailVisualsTbl = *trailDefinitionTbl["Visuals"].as_table();
 						
 						// lifetime mult
-						auto lifetimeMult = trailVisualsTbl["LifetimeMult"].value<float>();
+						trailOverride.lifetimeMult = trailVisualsTbl["LifetimeMult"].value<float>();
 						
 						const auto fillColor = [&](const toml::table* a_table, RE::NiColorA& a_outColor) {
 							if (a_table) {
@@ -397,21 +482,19 @@ void Settings::ReadSettings()
 						};
 
 						// base color override
-						std::optional<RE::NiColorA> baseColorOverride;
 						auto baseColorOverrideTbl = trailVisualsTbl["BaseColorOverride"].as_table();
 						if (baseColorOverrideTbl) {
-							baseColorOverride = RE::NiColorA();
-							fillColor(baseColorOverrideTbl, *baseColorOverride);
+							trailOverride.baseColorOverride = RE::NiColorA();
+							fillColor(baseColorOverrideTbl, *trailOverride.baseColorOverride);
 						}
 
 						// base color scale mult
-						auto baseColorScaleMult = trailVisualsTbl["BaseColorScaleMult"].value<float>();
+						trailOverride.baseColorScaleMult = trailVisualsTbl["BaseColorScaleMult"].value<float>();
 						
 						// trail mesh override
-						std::optional<std::string> trailMeshOverride;
 						auto trailMeshOverrideVal = trailVisualsTbl["TrailMeshOverride"].value<std::string_view>();
 						if (trailMeshOverrideVal) {
-							trailMeshOverride = *trailMeshOverrideVal;							
+							trailOverride.meshOverride = *trailMeshOverrideVal;							
 						}
 
 						std::vector<TrailDefinition>* trailDefinitions = nullptr;
@@ -421,7 +504,7 @@ void Settings::ReadSettings()
 							trailDefinitions = &trailDefinitionsAny;
 						}
 						
-						trailDefinitions->emplace_back(priority, bHasWeaponName ? std::optional(weaponNames) : std::nullopt, bHasWeaponKeyword ? std::optional(weaponKeywords) : std::nullopt, bHasEnchantmentName ? std::optional(enchantmentNames) : std::nullopt, bHasEffectName ? std::optional(effectNames) : std::nullopt, bHasEffectKeyword ? std::optional(effectKeywords) : std::nullopt, bHasEffectShader ? std::optional(effectShaders) : std::nullopt, lifetimeMult, baseColorOverride, baseColorScaleMult, trailMeshOverride);
+						trailDefinitions->emplace_back(priority, bHasWeaponName ? std::optional(weaponNames) : std::nullopt, bHasWeaponKeyword ? std::optional(weaponKeywords) : std::nullopt, bHasEnchantmentName ? std::optional(enchantmentNames) : std::nullopt, bHasEffectName ? std::optional(effectNames) : std::nullopt, bHasEffectKeyword ? std::optional(effectKeywords) : std::nullopt, bHasEffectShader ? std::optional(effectShaders) : std::nullopt, trailOverride);
 					}
 				}
 			}
@@ -456,7 +539,13 @@ void Settings::ReadSettings()
 	logger::info("Reading .toml files...");
 
 	attackRaceDefinitions.clear();
+	attackRaceDefinitionsPreHitFrame.clear();
+	attackRaceDefinitionsCastOKStart.clear();
+	attackRaceDefinitionsCastOKStop.clear();
 	attackAnimationDefinitions.clear();
+	attackAnimationDefinitionsPreHitFrame.clear();
+	attackAnimationDefinitionsCastOKStart.clear();
+	attackAnimationDefinitionsCastOKStop.clear();
 	trailDefinitionsAny.clear();
 	trailDefinitionsAll.clear();
 	attackEventPairs.clear();
@@ -512,6 +601,7 @@ void Settings::ReadSettings()
 		ReadUInt32Setting(mcm, "AttackCollisions", "uMaxTargetsNoSweepAttack", uMaxTargetsNoSweepAttack);
 		ReadUInt32Setting(mcm, "AttackCollisions", "uMaxTargetsSweepAttack", uMaxTargetsSweepAttack);
 		ReadFloatSetting(mcm, "AttackCollisions", "fSweepAttackDiminishingReturnsFactor", fSweepAttackDiminishingReturnsFactor);
+		ReadFloatSetting(mcm, "AttackCollisions", "fGroundFeetDistanceThreshold", fGroundFeetDistanceThreshold);
 
 		// Trails
 		ReadBoolSetting(mcm, "Trails", "bDisplayTrails", bDisplayTrails);
@@ -533,7 +623,6 @@ void Settings::ReadSettings()
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopDurationPowerAttackMultiplier", fHitstopDurationPowerAttackMultiplier);
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopDurationTwoHandedMultiplier", fHitstopDurationTwoHandedMultiplier);
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopDurationDiminishingReturnsFactor", fHitstopDurationDiminishingReturnsFactor);
-		ReadFloatSetting(mcm, "Hitstop", "fHitstopGroundFeetDistanceThreshold", fHitstopGroundFeetDistanceThreshold);
 
 		ReadBoolSetting(mcm, "Hitstop", "bEnableHitstopCameraShake", bEnableHitstopCameraShake);
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopCameraShakeStrengthNPC", fHitstopCameraShakeStrengthNPC);
@@ -544,7 +633,6 @@ void Settings::ReadSettings()
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopCameraShakePowerAttackMultiplier", fHitstopCameraShakePowerAttackMultiplier);
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopCameraShakeTwoHandedMultiplier", fHitstopCameraShakeTwoHandedMultiplier);
 		ReadFloatSetting(mcm, "Hitstop", "fHitstopCameraShakeDurationDiminishingReturnsFactor", fHitstopCameraShakeDurationDiminishingReturnsFactor);
-		ReadFloatSetting(mcm, "Hitstop", "fHitstopCameraShakeGroundFeetDistanceThreshold", fHitstopCameraShakeGroundFeetDistanceThreshold);
 
 		// Recoil
 		ReadBoolSetting(mcm, "Recoil", "bRecoilPlayer", bRecoilPlayer);
@@ -553,7 +641,6 @@ void Settings::ReadSettings()
 		ReadBoolSetting(mcm, "Recoil", "bUseVanillaRecoil", bUseVanillaRecoil);
 		ReadFloatSetting(mcm, "Recoil", "fRecoilFirstPersonDistanceThreshold", fRecoilFirstPersonDistanceThreshold);
 		ReadFloatSetting(mcm, "Recoil", "fRecoilThirdPersonDistanceThreshold", fRecoilThirdPersonDistanceThreshold);
-		ReadFloatSetting(mcm, "Recoil", "fRecoilGroundFeetDistanceThreshold", fRecoilGroundFeetDistanceThreshold);
 
 		ReadBoolSetting(mcm, "Recoil", "bEnableRecoilCameraShake", bEnableRecoilCameraShake);
 		ReadFloatSetting(mcm, "Recoil", "fRecoilCameraShakeStrength", fRecoilCameraShakeStrength);

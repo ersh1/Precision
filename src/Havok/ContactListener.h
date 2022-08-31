@@ -2,19 +2,6 @@
 
 class ContactListener : public RE::hkpContactListener
 {
-	struct CollisionEvent
-	{
-		enum class Type
-		{
-			Added,
-			Removed
-		};
-
-		RE::hkpRigidBody* rbA = nullptr;
-		RE::hkpRigidBody* rbB = nullptr;
-		Type type;
-	};
-
 public:
 	void ContactPointCallback(const RE::hkpContactPointEvent& a_event) override;
 

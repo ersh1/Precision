@@ -4,10 +4,6 @@
 
 struct CachedAttackData
 {
-	using Lock = std::shared_mutex;
-	using ReadLocker = std::shared_lock<Lock>;
-	using WriteLocker = std::unique_lock<Lock>;
-
 	CachedAttackData() :
 		lock()
 	{}

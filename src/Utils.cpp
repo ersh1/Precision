@@ -624,15 +624,20 @@ namespace Utils
 	RE::NiBound GetModelBounds(RE::NiAVObject* a_obj)
 	{
 		RE::NiBound ret{};
+		bool bInitial = true;
+		
 		TraverseMeshes(a_obj, true, [&](auto&& a_geometry) {
 			RE::NiBound modelBound = a_geometry->modelBound;
 
-			modelBound.center *= a_geometry->local.scale;
+			modelBound.center = a_geometry->local * modelBound.center;
 			modelBound.radius *= a_geometry->local.scale;
 
-			modelBound.center += a_geometry->local.translate;
-
-			NiBound_Combine(ret, modelBound);
+			if (bInitial) {
+				ret = modelBound;
+				bInitial = false;
+			} else {			
+				NiBound_Combine(ret, modelBound);
+			}
 		});
 
 		if (ret.radius == 0.f) {
@@ -645,33 +650,38 @@ namespace Utils
 
 				modelBound.center += a_geometry->local.translate;
 
-				NiBound_Combine(ret, modelBound);
+				if (bInitial) {
+					ret = modelBound;
+					bInitial = false;
+				} else {
+					NiBound_Combine(ret, modelBound);
+				}
 			});
 		}
 
 		return ret;
 	}
 
-	//float FindTopVertex(RE::BSGeometry* a_geom)
-	//{
-	//	float top = 0.f;
-	//	if (auto triShape = a_geom->AsTriShape()) {
-	//		auto vertexSize = triShape->vertexDesc.GetSize();
-	//		auto vertexCount = triShape->vertexCount;
-	//		auto posOffset = triShape->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
+	/*float FindTopVertex(RE::BSGeometry* a_geom)
+	{
+		float top = 0.f;
+		if (auto triShape = a_geom->AsTriShape()) {
+			auto vertexSize = triShape->vertexDesc.GetSize();
+			auto vertexCount = triShape->vertexCount;
+			auto posOffset = triShape->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
 
-	//		for (uint32_t v = 0; v < vertexCount; ++v) {
-	//			uintptr_t vert = (uintptr_t)triShape->rendererData->rawVertexData + (v * vertexSize);
-	//			RE::NiPoint3* vertPos = (RE::NiPoint3*)(vert + posOffset);
+			for (uint32_t v = 0; v < vertexCount; ++v) {
+				uintptr_t vert = (uintptr_t)triShape->rendererData->rawVertexData + (v * vertexSize);
+				RE::NiPoint3* vertPos = (RE::NiPoint3*)(vert + posOffset);
 
-	//			if (vertPos->y > top) {
-	//				top = vertPos->y;
-	//			}
-	//		}
-	//	}
+				if (vertPos->y > top) {
+					top = vertPos->y;
+				}
+			}
+		}
 
-	//	return top;
-	//}
+		return top;
+	}*/
 
 	//float GetTopVertex(RE::NiAVObject* a_obj)
 	//{

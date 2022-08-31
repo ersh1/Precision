@@ -31,6 +31,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		return;
 	}
 
+	// run callbacks and re-check flag
+	PrecisionHandler::GetSingleton()->RunContactListenerCallbacks(a_event);
+	if (a_event.contactPointProperties->flags & RE::hkContactPointMaterial::FlagEnum::kIsDisabled) {
+		return;
+	}
+
 	RE::hkpRigidBody* rigidBodyA = a_event.bodies[0];
 	RE::hkpRigidBody* rigidBodyB = a_event.bodies[1];
 
@@ -38,7 +44,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	CollisionLayer layerB = static_cast<CollisionLayer>(rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo & 0x7f);
 
 	if (layerA != CollisionLayer::kPrecision && layerB != CollisionLayer::kPrecision) {
-		return;  // Every collision we care about involves a Precision layer
+		return;  // Every collision we care about involves the Precision layer
 	}
 
 	auto hitRigidBody = layerA == CollisionLayer::kPrecision ? rigidBodyB : rigidBodyA;
@@ -77,7 +83,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 	auto attackerActor = attacker->As<RE::Actor>();
 	auto attackerHandle = attackerActor->GetHandle();
-	auto node = GetNodeFromCollidable(hittingRigidBody->GetCollidable());
+	auto node = GetNiObjectFromCollidable(hittingRigidBody->GetCollidable());
 	auto attackCollision = precisionHandler->GetAttackCollision(attackerHandle, node);
 	RE::hkVector4 hkHitPos = a_event.contactPoint->position;
 
@@ -93,7 +99,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
 
 	if (pointVelocity.IsEqual(RE::hkVector4())) {  // point velocity is zero
-		auto hittingNode = GetNodeFromCollidable(&hittingRigidBody->collidable);
+		auto hittingNode = GetNiObjectFromCollidable(&hittingRigidBody->collidable);
 		pointVelocity = GetParentNodePointVelocity(hittingNode, hkHitPos);
 	}
 
@@ -163,7 +169,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		bool bIsPlayer = attackerActor->IsPlayerRef();
 		bool bIsFirstPerson = bIsPlayer && RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
 
-		auto hittingNode = GetNodeFromCollidable(&hittingRigidBody->collidable);
+		auto hittingNode = GetNiObjectFromCollidable(&hittingRigidBody->collidable);
 
 		float hitDistanceFromWeaponRoot = hittingNode->world.translate.GetDistance(niHitPos);
 
@@ -193,7 +199,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 						if (bDoRecoil) {
 							// skip recoil if contact point is close to feet level
-							if (fabs(feetPosition - niHitPos.z) < Settings::fRecoilGroundFeetDistanceThreshold) {
+							if (fabs(feetPosition - niHitPos.z) < Settings::fGroundFeetDistanceThreshold) {
 								bDoRecoil = false;
 							}
 						}
@@ -234,7 +240,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 									if (Settings::bEnableRecoilCameraShake && attackerActor->IsPlayerRef()) {
 										precisionHandler->ApplyCameraShake(
 											Settings::fRecoilCameraShakeStrength, Settings::fRecoilCameraShakeDuration,
-											Settings::fRecoilCameraShakeFrequency, { 1.f, 0.f, 0.f });
+											Settings::fRecoilCameraShakeFrequency, 0.f);
 									}
 
 									if (Settings::bDebug && Settings::bDisplayRecoilCollisions) {
@@ -249,6 +255,16 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 					}
 				}
 			}
+		}
+
+		// check ground shake
+		if (attackCollision->groundShake && fabs(feetPosition - niHitPos.z) < Settings::fGroundFeetDistanceThreshold) {
+			auto cameraPos = RE::PlayerCamera::GetSingleton()->cameraRoot->world.translate;		
+			auto distanceSquared = cameraPos.GetSquaredDistance(niHitPos);
+
+			precisionHandler->ApplyCameraShake(
+				attackCollision->groundShake->x, attackCollision->groundShake->y,
+				attackCollision->groundShake->z, distanceSquared);
 		}
 	}
 
@@ -267,12 +283,8 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (hitLayer == CollisionLayer::kCharController && target && target->formType == RE::FormType::ActorCharacter) {
 		if (targetActor) {
 			auto charController = targetActor->GetCharController();
-			if (charController) {
-				uint32_t filterInfo;
-				charController->GetCollisionFilterInfo(filterInfo);
-				auto& hittableCharControllerGroups = PrecisionHandler::hittableCharControllerGroups;
-				bool bIsHittableCharController = hittableCharControllerGroups.size() > 0 && hittableCharControllerGroups.contains(filterInfo >> 16);
-				if (!bIsHittableCharController) {
+			if (charController) {	
+				if (!PrecisionHandler::IsCharacterControllerHittable(charController)) {
 					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 					return;
 				}
@@ -325,7 +337,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (Settings::bEnableJumpIframes && targetActor && Utils::GetBodyPartData(targetActor) == Settings::defaultBodyPartData) {  // do this only for humanoids
 		if (auto charController = targetActor->GetCharController()) {
 			if (charController->context.currentState == RE::hkpCharacterStateTypes::kJumping || charController->context.currentState == RE::hkpCharacterStateTypes::kInAir) {
-				if (auto hitNode = GetNodeFromCollidable(hitRigidBody->GetCollidable())) {
+				if (auto hitNode = GetNiObjectFromCollidable(hitRigidBody->GetCollidable())) {
 					if (!Utils::IsNodeOrChildOfNode(hitNode, Settings::jumpIframeNode)) {
 						a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 
@@ -382,7 +394,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 		if (Settings::bEnableHitstop) {
 			// skip hitstop if not hitting an actor and contact point is close to feet level
-			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fHitstopGroundFeetDistanceThreshold) {
+			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fGroundFeetDistanceThreshold) {
 				float diminishingReturnsMultiplier = pow(Settings::fHitstopDurationDiminishingReturnsFactor, hitCount - 1);
 
 				float hitstopLength = (bIsActorAlive ? Settings::fHitstopDurationNPC : Settings::fHitstopDurationOther) * diminishingReturnsMultiplier;
@@ -409,7 +421,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			//*g_currentCameraShakeStrength = targetActor ? Settings::fHitstopCameraShakeStrengthNPC : Settings::fHitstopCameraShakeStrengthOther;
 
 			// skip camera shake if not hitting an actor and contact point is close to feet level
-			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fHitstopGroundFeetDistanceThreshold) {
+			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fGroundFeetDistanceThreshold) {
 				float diminishingReturnsMultiplier = pow(Settings::fHitstopCameraShakeDurationDiminishingReturnsFactor, hitCount - 1);
 
 				float cameraShakeLength = (bIsActorAlive ? Settings::fHitstopCameraShakeDurationNPC : Settings::fHitstopCameraShakeDurationOther) * diminishingReturnsMultiplier;
@@ -425,7 +437,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 					cameraShakeLength *= Settings::fHitstopCameraShakeTwoHandedMultiplier;
 				}
 
-				precisionHandler->ApplyCameraShake(cameraShakeStrength, cameraShakeLength, Settings::fHitstopCameraShakeFrequency, { 1.f, 0.f, 0.f });
+				precisionHandler->ApplyCameraShake(cameraShakeStrength, cameraShakeLength, Settings::fHitstopCameraShakeFrequency, 0.f);
 			}
 		}
 	}

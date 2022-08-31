@@ -94,7 +94,7 @@ void PendingHit::DoHit()
 	PrecisionHandler::cachedAttackData.SetDamageMult(damageMult);
 	PrecisionHandler::cachedAttackData.SetStaggerMult(staggerMult);
 	PrecisionHandler::cachedAttackData.SetAttackingActorHandle(attacker->GetHandle());
-	PrecisionHandler::cachedAttackData.SetHittingNode(GetNodeFromCollidable(&hittingRigidBody->collidable));
+	PrecisionHandler::cachedAttackData.SetHittingNode(GetNiObjectFromCollidable(&hittingRigidBody->collidable));
 
 	CalculateCurrentHitTargetForWeaponSwing(attacker.get());  // call this for vanilla stuff, skipping the actual collision check thanks to the hook (the collision is active)
 
@@ -117,7 +117,7 @@ void PendingHit::DoHit()
 
 		bool bIsDead = targetActor->IsDead();
 
-		PrecisionHandler::cachedAttackData.SetLastHitNode(GetNodeFromCollidable(&hitRigidBody->collidable));
+		PrecisionHandler::cachedAttackData.SetLastHitNode(GetNiObjectFromCollidable(&hitRigidBody->collidable));
 
 		DealDamage(attacker.get(), targetActor, nullptr, bIsLeftHand);
 
@@ -194,7 +194,7 @@ void PendingHit::DoHit()
 		if (Settings::bDebug && Settings::bDisplayHitNodeCollisions) {
 			constexpr glm::vec4 green{ 0.0, 1.0, 0.0, 1.0 };
 
-			auto node = RE::NiPointer<RE::NiAVObject>(GetNodeFromCollidable(hitRigidBody->GetCollidable()));
+			auto node = RE::NiPointer<RE::NiAVObject>(GetNiObjectFromCollidable(hitRigidBody->GetCollidable()));
 			DrawHandler::AddCollider(node, 1.f, green);
 		}
 

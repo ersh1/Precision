@@ -6,7 +6,7 @@
 #include "render/line_drawer.h"
 #include "render/DrawHandler.h"
 
-AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength) :
+AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength, std::optional<TrailOverride> a_trailOverride /*= std::nullopt*/) :
 	actorHandle(a_actorHandle)
 {
 	weaponRotation = RE::NiMatrix3(0.f, RE::NI_HALF_PI, -RE::NI_HALF_PI);
@@ -18,20 +18,35 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 		
 		std::string_view trailMeshPath = Settings::attackTrailMeshPath;
 		std::optional<std::string_view> additionalEmitterPath;
-		
-		TrailDefinition trailDefinition;
-		if (GetTrailDefinition(a_actorHandle, a_weaponItem, a_bIsLeftHand, trailDefinition)) {
-			if (trailDefinition.lifetimeMult) {
-				lifetimeMult = *trailDefinition.lifetimeMult;
+
+		if (a_trailOverride) {
+			if (a_trailOverride->lifetimeMult) {
+				lifetimeMult = *a_trailOverride->lifetimeMult;
 			}
-			if (trailDefinition.baseColorOverride) {
-				baseColorOverride = *trailDefinition.baseColorOverride;				
+			if (a_trailOverride->baseColorOverride) {
+				baseColorOverride = *a_trailOverride->baseColorOverride;
 			}
-			if (trailDefinition.baseColorScaleMult) {
-				baseColorScaleMult = *trailDefinition.baseColorScaleMult;
+			if (a_trailOverride->baseColorScaleMult) {
+				baseColorScaleMult = *a_trailOverride->baseColorScaleMult;
 			}
-			if (trailDefinition.trailMeshOverride) {
-				trailMeshPath = *trailDefinition.trailMeshOverride;
+			if (a_trailOverride->meshOverride) {
+				trailMeshPath = *a_trailOverride->meshOverride;
+			}
+		} else {
+			TrailDefinition trailDefinition;
+			if (GetTrailDefinition(a_actorHandle, a_weaponItem, a_bIsLeftHand, trailDefinition)) {
+				if (trailDefinition.trailOverride.lifetimeMult) {
+					lifetimeMult = *trailDefinition.trailOverride.lifetimeMult;
+				}
+				if (trailDefinition.trailOverride.baseColorOverride) {
+					baseColorOverride = *trailDefinition.trailOverride.baseColorOverride;
+				}
+				if (trailDefinition.trailOverride.baseColorScaleMult) {
+					baseColorScaleMult = *trailDefinition.trailOverride.baseColorScaleMult;
+				}
+				if (trailDefinition.trailOverride.meshOverride) {
+					trailMeshPath = *trailDefinition.trailOverride.meshOverride;
+				}
 			}
 		}
 

@@ -88,9 +88,9 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 	std::string_view eventTag = a_event->tag.data();
 
-	/*if (actor == RE::PlayerCharacter::GetSingleton()) {
+	if (actor == RE::PlayerCharacter::GetSingleton()) {
 		logger::debug("{}", a_event->tag);
-	}*/
+	}
 
 	switch (hash(eventTag.data(), eventTag.size())) {
 	case "Collision_AttackStart"_h:
@@ -108,24 +108,37 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 	case "SoundPlay.NPCHumanCombatShieldBash"_h:
 	case "weaponSwing"_h:
 	case "weaponLeftSwing"_h:
+	case "preHitFrame"_h:
+	case "CastOKStart"_h:
+	case "CastOKStop"_h:
 		{
 			// only do this if we haven't received a Collision_Start event (vanilla)
 			auto actorHandle = actor->GetHandle();
 			if (!HasStartedPrecisionCollision(actorHandle, activeGraphIdx)) {
 				bool bIsWPNSwingUnarmed = a_event->tag == "SoundPlay.WPNSwingUnarmed";
+				AttackDefinition::SwingEvent swingEvent = AttackDefinition::SwingEvent::kWeaponSwing;
+				if (a_event->tag == "preHitFrame") {
+					swingEvent = AttackDefinition::SwingEvent::kPreHitFrame;
+				} else if (a_event->tag == "CastOKStart") {
+					swingEvent = AttackDefinition::SwingEvent::kCastOKStart;
+				} else if (a_event->tag == "CastOKStop") {
+					swingEvent = AttackDefinition::SwingEvent::kCastOKStop;
+				}
 				if ((bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWeaponSwing(actorHandle)) || (!bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle))) {
-					AttackDefinition attackDefinition;
-					if (bIsWPNSwingUnarmed) {
-						SetStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle);
-					} else {
-						SetStartedDefaultCollisionWithWeaponSwing(actorHandle);
-					}
+					AttackDefinition attackDefinition;		
 
 					std::optional<bool> bIsLeftSwing = std::nullopt;
 					if (!bIsWPNSwingUnarmed) {
 						bIsLeftSwing = a_event->tag == "weaponLeftSwing"sv;
 					}
-					if (GetAttackCollisionDefinition(actor, attackDefinition, bIsLeftSwing)) {
+					if (GetAttackCollisionDefinition(actor, attackDefinition, bIsLeftSwing, swingEvent)) {
+
+						if (bIsWPNSwingUnarmed) {
+							SetStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle);
+						} else {
+							SetStartedDefaultCollisionWithWeaponSwing(actorHandle);
+						}
+						
 						AddAttack(actor->GetHandle(), attackDefinition);
 					}
 				}
@@ -227,6 +240,7 @@ void PrecisionHandler::Update(float a_deltaTime)
 		}
 	}
 
+	// do pending hits
 	for (auto& pendingHit : pendingHits) {
 		pendingHit.DoHit();
 	}
@@ -269,6 +283,7 @@ void PrecisionHandler::Update(float a_deltaTime)
 		}
 	}
 	
+	// update trails
 	for (auto& trail : _attackTrails) {
 		trail->Update(a_deltaTime);
 	}
@@ -286,7 +301,6 @@ void PrecisionHandler::Update(float a_deltaTime)
 			currentCameraShakeStrength = 0.f;
 			currentCameraShakeLength = 0.f;
 			currentCameraShakeFrequency = 0.f;
-			currentCameraShakeAxis = {};
 		}
 	}
 }
@@ -361,15 +375,23 @@ float PrecisionHandler::GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaT
 	return a_deltaTime;
 }
 
-void PrecisionHandler::ApplyCameraShake(float a_strength, float a_length, float a_frequency, const RE::NiPoint3& a_axis)
+void PrecisionHandler::ApplyCameraShake(float a_strength, float a_length, float a_frequency, float a_distanceSquared)
 {
-	if (a_strength > currentCameraShakeStrength || a_length > currentCameraShakeTimer) {
+	// do a inverse-square falloff for shake strength
+	if (a_distanceSquared > 0.f) {
+		float strengthMult = 1.f;
+		if (a_distanceSquared < Settings::cameraShakeRadiusSquared) {
+			strengthMult = 1 - (a_distanceSquared / Settings::cameraShakeRadiusSquared);
+		}
+		a_strength *= strengthMult;
+	}	
+
+	if (currentCameraShakeStrength / a_strength < 0.8f) {
 		bCameraShakeActive = true;
 		currentCameraShakeStrength = a_strength;
 		currentCameraShakeLength = a_length;
 		currentCameraShakeFrequency = a_frequency;
 		currentCameraShakeTimer = a_length;
-		currentCameraShakeAxis = a_axis;
 	}
 }
 
@@ -465,7 +487,15 @@ bool PrecisionHandler::AddAttack(RE::ActorHandle a_actorHandle, const AttackDefi
 
 	for (auto& collisionDef : a_attackDefinition.collisions) {
 		if (collisionDef.delay) {
-			QueueDelayedJob<DelayedAttackCollisionJob>(*collisionDef.delay, a_actorHandle, collisionDef);
+			float weaponSpeedMult = 1.f;
+			actor->GetGraphVariableFloat("weaponSpeedMult"sv, weaponSpeedMult);
+			if (weaponSpeedMult == 0.f) {
+				weaponSpeedMult = 1.f;
+			}
+			float delay = *collisionDef.delay;
+			delay /= weaponSpeedMult;
+
+			QueueDelayedJob<DelayedAttackCollisionJob>(delay, a_actorHandle, collisionDef);
 		} else {
 			activeActor.AddAttackCollision(a_actorHandle, collisionDef);
 		}
@@ -635,6 +665,24 @@ bool PrecisionHandler::HasHitstop(RE::ActorHandle a_actorHandle) const
 	return activeHitstops.contains(a_actorHandle);
 }
 
+bool PrecisionHandler::HasActiveImpulse(RE::ActorHandle a_actorHandle)
+{
+	bool bHasImpulse = false;
+	
+	auto actor = a_actorHandle.get();
+	if (actor) {
+		Utils::ForEachRagdollDriver(actor.get(), [&](RE::hkbRagdollDriver* a_driver) {
+			if (auto activeRagdoll = GetActiveRagdollFromDriver(a_driver)) {
+				if (activeRagdoll->IsImpulseActive()) {
+					bHasImpulse = true;
+				}
+			}
+		});
+	}
+
+	return bHasImpulse;
+}
+
 void PrecisionHandler::SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle)
 {
 	WriteLocker locker(attackCollisionsLock);
@@ -791,6 +839,25 @@ void PrecisionHandler::Initialize()
 
 void PrecisionHandler::Clear()
 {
+	{
+		WriteLocker locker(activeActorsLock);
+		PrecisionHandler::activeActors.clear();
+		PrecisionHandler::activeControllerGroups.clear();
+	}
+	
+	{
+		WriteLocker locker(hittableCharControllerGroupsLock);
+		PrecisionHandler::hittableCharControllerGroups.clear();
+	}
+	
+	{
+		WriteLocker locker(disabledActorsLock);
+		PrecisionHandler::disabledActors.clear();
+	}
+	
+	PrecisionHandler::activeRagdolls.clear();
+	PrecisionHandler::ragdollCollisionGroups.clear();
+	PrecisionHandler::contactListener = ContactListener{};
 }
 
 void PrecisionHandler::OnPreLoadGame()
@@ -842,8 +909,11 @@ void PrecisionHandler::ProcessDelayedJobs(float a_deltaTime)
 	}
 }
 
-bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> bIsLeftSwing /*= std::nullopt*/) const
+bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> a_bIsLeftSwing /*= std::nullopt*/, AttackDefinition::SwingEvent a_swingEvent /*= AttackDefinition::SwingEvent::kWeaponSwing*/) const
 {
+	using AttackAnimationDefinitionsMap = std::unordered_map<std::string, std::unordered_map<std::string, AttackDefinition>>;
+	using AttackRaceDefinitionsMap = std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>>;
+
 	if (!a_actor) {
 		return false;
 	}
@@ -856,8 +926,26 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 	if (Utils::GetActiveAnim(a_actor, projectName, animName, animTime)) {
 		std::string projectNameStr = projectName.data();
 		std::transform(projectNameStr.begin(), projectNameStr.end(), projectNameStr.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
-		auto search = Settings::attackAnimationDefinitions.find(projectNameStr);
-		if (search != Settings::attackAnimationDefinitions.end()) {
+
+		AttackAnimationDefinitionsMap* definitionsMap = nullptr;
+		switch (a_swingEvent) {
+		case AttackDefinition::SwingEvent::kWeaponSwing:
+			definitionsMap = &Settings::attackAnimationDefinitions;
+			break;
+		case AttackDefinition::SwingEvent::kPreHitFrame:
+			definitionsMap = &Settings::attackAnimationDefinitionsPreHitFrame;
+			break;
+		case AttackDefinition::SwingEvent::kCastOKStart:
+			definitionsMap = &Settings::attackAnimationDefinitionsCastOKStart;
+			break;
+		case AttackDefinition::SwingEvent::kCastOKStop:
+			definitionsMap = &Settings::attackAnimationDefinitionsCastOKStop;
+			break;
+		}
+		
+		auto search = definitionsMap->find(projectNameStr);
+		
+		if (search != definitionsMap->end()) {
 			auto& attackDefinitions = search->second;
 
 			std::string animNameStr = animName.data();
@@ -883,8 +971,25 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		return false;
 	}
 
-	auto search = Settings::attackRaceDefinitions.find(bodyPartData);
-	if (search == Settings::attackRaceDefinitions.end()) {
+	AttackRaceDefinitionsMap* definitionsMap = nullptr;
+	switch (a_swingEvent) {
+	case AttackDefinition::SwingEvent::kWeaponSwing:
+		definitionsMap = &Settings::attackRaceDefinitions;
+		break;
+	case AttackDefinition::SwingEvent::kPreHitFrame:
+		definitionsMap = &Settings::attackRaceDefinitionsPreHitFrame;
+		break;
+	case AttackDefinition::SwingEvent::kCastOKStart:
+		definitionsMap = &Settings::attackRaceDefinitionsCastOKStart;
+		break;
+	case AttackDefinition::SwingEvent::kCastOKStop:
+		definitionsMap = &Settings::attackRaceDefinitionsCastOKStop;
+		break;
+	}
+
+	auto search = definitionsMap->find(bodyPartData);
+	
+	if (search == definitionsMap->end()) {
 		return false;
 	}
 
@@ -892,8 +997,8 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 
 	auto& attackData = Actor_GetAttackData(a_actor);
 
-	if (bIsLeftSwing.has_value()) {
-		if (attackData && attackData->IsLeftAttack() != bIsLeftSwing) {
+	if (a_bIsLeftSwing.has_value()) {
+		if (attackData && attackData->IsLeftAttack() != a_bIsLeftSwing) {
 			attackData = GetOppositeAttackEvent(attackData, race->attackDataMap.get());
 		}
 	}
@@ -904,7 +1009,7 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 	} else {
 		attackEvent = "DEFAULT_UNARMED"sv;
 		if (a_actor->currentProcess && a_actor->currentProcess->middleHigh) {
-			auto equipment = bIsLeftSwing ? a_actor->currentProcess->middleHigh->leftHand : a_actor->currentProcess->middleHigh->rightHand;
+			auto equipment = a_bIsLeftSwing ? a_actor->currentProcess->middleHigh->leftHand : a_actor->currentProcess->middleHigh->rightHand;
 			if (equipment && equipment->object) {
 				if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
 					if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {
@@ -969,6 +1074,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 		yString.remove_prefix(std::min(yString.find_first_not_of(" "), yString.size()));
 		auto zString = a_parameter.substr(ysplit, end - ysplit - 1);
 		zString.remove_prefix(std::min(zString.find_first_not_of(" "), zString.size()));
+		
 		auto result = std::from_chars(xString.data(), xString.data() + xString.size(), a_outNiPoint3.x);
 		if (result.ec != std::errc()) {
 			return false;
@@ -978,6 +1084,37 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 			return false;
 		}
 		result = std::from_chars(zString.data(), zString.data() + zString.size(), a_outNiPoint3.z);
+		return result.ec == std::errc();
+	};
+
+	const auto parseNiColorAParameter = [](std::string_view& a_parameter, RE::NiColorA& a_outNiColorA) {
+		auto start = a_parameter.find('(') + 1;
+		auto rsplit = a_parameter.find(',', start) + 1;
+		auto gsplit = a_parameter.find(',', rsplit) + 1;
+		auto bsplit = a_parameter.find(',', gsplit) + 1;
+		auto end = a_parameter.find(')', bsplit) + 1;
+		auto rString = a_parameter.substr(start, rsplit - start - 1);
+		rString.remove_prefix(std::min(rString.find_first_not_of(" "), rString.size()));
+		auto gString = a_parameter.substr(rsplit, gsplit - rsplit - 1);
+		gString.remove_prefix(std::min(gString.find_first_not_of(" "), gString.size()));
+		auto bString = a_parameter.substr(gsplit, bsplit - gsplit - 1);
+		bString.remove_prefix(std::min(bString.find_first_not_of(" "), bString.size()));
+		auto aString = a_parameter.substr(bsplit, end - bsplit - 1);
+		aString.remove_prefix(std::min(aString.find_first_not_of(" "), aString.size()));
+		
+		auto result = std::from_chars(rString.data(), rString.data() + rString.size(), a_outNiColorA.red);
+		if (result.ec != std::errc()) {
+			return false;
+		}
+		result = std::from_chars(gString.data(), gString.data() + gString.size(), a_outNiColorA.green);
+		if (result.ec != std::errc()) {
+			return false;
+		}
+		result = std::from_chars(bString.data(), bString.data() + bString.size(), a_outNiColorA.blue);
+		if (result.ec != std::errc()) {
+			return false;
+		}
+		result = std::from_chars(aString.data(), aString.data() + aString.size(), a_outNiColorA.alpha);
 		return result.ec == std::errc();
 	};
 
@@ -1135,6 +1272,74 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					a_outCollisionDefinition.transform->scale = parsedFloat;
 				} else {
 					logger::error("Invalid {} event payload - scale could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
+		case "groundShake"_h:
+			{
+				RE::NiPoint3 parsedNiPoint3;
+				if (parseNiPoint3Parameter(parameter, parsedNiPoint3)) {
+					a_outCollisionDefinition.groundShake = parsedNiPoint3;
+				} else {
+					logger::error("Invalid {} event payload - ground shake could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
+		case "trailLifetimeMult"_h:
+			{
+				float parsedFloat;
+				if (parseFloatParameter(parameter, parsedFloat)) {
+					if (!a_outCollisionDefinition.trailOverride) {
+						a_outCollisionDefinition.trailOverride = TrailOverride();
+					}
+					a_outCollisionDefinition.trailOverride->lifetimeMult = parsedFloat;
+				} else {
+					logger::error("Invalid {} event payload - trail lifetime mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
+		case "trailBaseColorOverride"_h:
+			{
+				RE::NiColorA parsedNiColorA;
+				if (parseNiColorAParameter(parameter, parsedNiColorA)) {
+					if (!a_outCollisionDefinition.trailOverride) {
+						a_outCollisionDefinition.trailOverride = TrailOverride();
+					}
+					a_outCollisionDefinition.trailOverride->baseColorOverride = parsedNiColorA;
+				} else {
+					logger::error("Invalid {} event payload - trail base color override could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+				break;
+			}
+		case "trailBaseColorScaleMult"_h:
+			{
+				float parsedFloat;
+				if (parseFloatParameter(parameter, parsedFloat)) {
+					if (!a_outCollisionDefinition.trailOverride) {
+						a_outCollisionDefinition.trailOverride = TrailOverride();
+					}
+					a_outCollisionDefinition.trailOverride->baseColorScaleMult = parsedFloat;
+				} else {
+					logger::error("Invalid {} event payload - trail base color scale mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					return false;
+				}
+				break;
+			}
+		case "trailMeshOverride"_h:
+			{
+				std::string_view parsedString;
+				if (parseStringParameter(parameter, parsedString)) {
+					if (!a_outCollisionDefinition.trailOverride) {
+						a_outCollisionDefinition.trailOverride = TrailOverride();
+					}
+					a_outCollisionDefinition.trailOverride->meshOverride = parsedString;
+				} else {
+					logger::error("Invalid {} event payload - trail mesh override could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
 					return false;
 				}
 				break;
@@ -1543,6 +1748,30 @@ bool PrecisionHandler::AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a
 	return true;
 }
 
+bool PrecisionHandler::AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback a_collisionFilterSetupCallback)
+{
+	WriteLocker locker(callbacksLock);
+
+	if (collisionFilterSetupCallbacks.contains(a_pluginHandle)) {
+		return false;
+	}
+
+	collisionFilterSetupCallbacks.emplace(a_pluginHandle, a_collisionFilterSetupCallback);
+	return true;
+}
+
+bool PrecisionHandler::AddContactListenerCallback(SKSE::PluginHandle a_pluginHandle, ContactListenerCallback a_contactListenerCallback)
+{
+	WriteLocker locker(callbacksLock);
+
+	if (contactListenerCallbacks.contains(a_pluginHandle)) {
+		return false;
+	}
+
+	contactListenerCallbacks.emplace(a_pluginHandle, a_contactListenerCallback);
+	return true;
+}
+
 bool PrecisionHandler::RemovePreHitCallback(SKSE::PluginHandle a_pluginHandle)
 {
 	WriteLocker locker(callbacksLock);
@@ -1583,6 +1812,20 @@ bool PrecisionHandler::RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandl
 	WriteLocker locker(callbacksLock);
 
 	return weaponProjectileCollisionCallbacks.erase(a_pluginHandle);
+}
+
+bool PrecisionHandler::RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle)
+{
+	WriteLocker locker(callbacksLock);
+
+	return collisionFilterSetupCallbacks.erase(a_pluginHandle);
+}
+
+bool PrecisionHandler::RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle)
+{
+	WriteLocker locker(callbacksLock);
+
+	return contactListenerCallbacks.erase(a_pluginHandle);
 }
 
 float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType /*= RequestedAttackCollisionType::Default*/) const
@@ -1692,6 +1935,71 @@ float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, R
 	return length;
 }
 
+bool PrecisionHandler::IsActorActive(RE::ActorHandle a_actorHandle)
+{
+	ReadLocker locker(activeActorsLock);
+
+	return PrecisionHandler::activeActors.size() > 0 && PrecisionHandler ::activeActors.contains(a_actorHandle);
+}
+
+bool PrecisionHandler::IsActorActiveCollisionGroup(uint16_t a_collisionGroup)
+{
+	ReadLocker locker(activeActorsLock);
+
+	return PrecisionHandler::activeControllerGroups.size() > 0 && PrecisionHandler ::activeControllerGroups.contains(a_collisionGroup);
+}
+
+bool PrecisionHandler::IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle)
+{
+	if (!IsActorActive(a_actorHandle)) {
+		return true;
+	}
+
+	if (auto actor = a_actorHandle.get()) {
+		if (auto controller = actor->GetCharController()) {
+			return IsCharacterControllerHittable(controller);
+		}
+	}
+
+	return false;
+}
+
+bool PrecisionHandler::IsCharacterControllerHittable(RE::bhkCharacterController* a_controller)
+{
+	if (a_controller) {
+		uint32_t filterInfo;
+		a_controller->GetCollisionFilterInfo(filterInfo);
+
+		return IsCharacterControllerHittableCollisionGroup(filterInfo >> 16);
+	}
+
+	return false;
+}
+
+bool PrecisionHandler::IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup)
+{
+	ReadLocker locker(PrecisionHandler::hittableCharControllerGroupsLock);
+	return PrecisionHandler::hittableCharControllerGroups.size() > 0 && PrecisionHandler::hittableCharControllerGroups.contains(a_collisionGroup);
+}
+
+bool PrecisionHandler::IsActorDisabled(RE::ActorHandle a_actorHandle)
+{
+	ReadLocker locker(PrecisionHandler::disabledActorsLock);
+	return PrecisionHandler::disabledActors.contains(a_actorHandle);
+}
+
+bool PrecisionHandler::ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable)
+{
+	WriteLocker locker(disabledActorsLock);
+	
+	if (a_bDisable) {
+		auto [iter, bSuccess] = disabledActors.emplace(a_actorHandle);
+		return bSuccess;
+	} else {
+		return disabledActors.erase(a_actorHandle);
+	}
+}
+
 std::vector<PRECISION_API::PreHitCallbackReturn> PrecisionHandler::RunPreHitCallbacks(const PrecisionHitData& a_precisionHitData)
 {
 	ReadLocker locker(callbacksLock);
@@ -1759,4 +2067,22 @@ std::vector<PrecisionHandler::WeaponCollisionCallbackReturn> PrecisionHandler::R
 		ret.emplace_back(entry.second(a_precisionHitData));
 	}
 	return ret;
+}
+
+void PrecisionHandler::RunCollisionFilterSetupCallbacks(RE::bhkCollisionFilter* a_collisionFilter)
+{
+	ReadLocker locker(callbacksLock);
+
+	for (auto& entry : collisionFilterSetupCallbacks) {
+		entry.second(a_collisionFilter);
+	}
+}
+
+void PrecisionHandler::RunContactListenerCallbacks(const RE::hkpContactPointEvent& a_event)
+{
+	ReadLocker locker(callbacksLock);
+
+	for (auto& entry : contactListenerCallbacks) {
+		entry.second(a_event);
+	}
 }

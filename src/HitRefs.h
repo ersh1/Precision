@@ -17,10 +17,6 @@ struct HitRefs
 	inline uint32_t GetDamagedCount() const { return damagedCount; }
 
 private:
-	using Lock = std::shared_mutex;
-	using ReadLocker = std::shared_lock<Lock>;
-	using WriteLocker = std::unique_lock<Lock>;
-
 	mutable Lock lock;
 
 	std::unordered_map<RE::ObjectRefHandle, float> hitRefs;

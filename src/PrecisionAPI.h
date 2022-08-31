@@ -11,7 +11,8 @@ namespace PRECISION_API
 	enum class InterfaceVersion : uint8_t
 	{
 		V1,
-		V2
+		V2,
+		V3
 	};
 
 	// Error types that may be returned by Precision
@@ -103,6 +104,8 @@ namespace PRECISION_API
 	using PrePhysicsStepCallback = std::function<void(RE::bhkWorld*)>;
 	using CollisionFilterComparisonCallback = std::function<CollisionFilterComparisonResult(RE::bhkCollisionFilter*, uint32_t, uint32_t)>;
 	using WeaponCollisionCallback = std::function<WeaponCollisionCallbackReturn(const PrecisionHitData&)>;
+	using CollisionFilterSetupCallback = std::function<void(RE::bhkCollisionFilter*)>;
+	using ContactListenerCallback = std::function<void(const RE::hkpContactPointEvent&)>;
 
 	// Precision's modder interface
 	class IVPrecision1
@@ -213,12 +216,89 @@ namespace PRECISION_API
 		/// <summary>
 		/// Applies impulse.
 		/// </summary>
-		/// <param name="a_refHandle">Actor handle</param>
+		/// <param name="a_actorHandle">Actor handle</param>
 		/// <param name="a_rigidBody">Hit rigid body</param>
 		/// <param name="a_hitVelocity">Hit velocity vector</param>
 		/// <param name="a_hitPosition">Hit position</param>
 		/// <param name="a_impulseMult">Impulse strength multiplier</param>
 		virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
+	};
+
+	class IVPrecision3 : public IVPrecision2
+	{
+	public:
+		/// <summary>
+		/// Adds a callback to where Precision alters the game's collision layers.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <param name="a_callback">The callback function</param>
+		/// <returns>OK, AlreadyRegistered</returns>
+		virtual APIResult AddCollisionFilterSetupCallback(SKSE::PluginHandle a_myPluginHandle, CollisionFilterSetupCallback&& a_callback) noexcept = 0;
+
+		/// <summary>
+		/// Removes the callback from where Precision alters the game's collision layers.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <returns>OK, NotRegistered</returns>
+		virtual APIResult RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
+
+		/// <summary>
+		/// Adds a callback to Precision's contact listener.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <param name="a_callback">The callback function</param>
+		/// <returns>OK, AlreadyRegistered</returns>
+		virtual APIResult AddContactListenerCallback(SKSE::PluginHandle a_myPluginHandle, ContactListenerCallback&& a_callback) noexcept = 0;
+
+		/// <summary>
+		/// Removes the callback from Precision's contact listener.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <returns>OK, NotRegistered</returns>
+		virtual APIResult RemoveContactListenerCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
+
+		/// <summary>
+		/// Checks if the actor is "active" in Precision's system (has ragdoll added, etc.)
+		/// </summary>
+		/// <param name="a_actorHandle">Actor handle</param>
+		/// <returns>Whether the actor is active</returns>
+		[[nodiscard]] virtual bool IsActorActive(RE::ActorHandle a_actorHandle) const noexcept = 0;
+
+		/// <summary>
+		/// Checks if the actor is "active" in Precision's system (has ragdoll added, etc.)
+		/// </summary>
+		/// <param name="a_collisionGroup">Collision group to check</param>
+		/// <returns>Whether the actor is active</returns>
+		[[nodiscard]] virtual bool IsActorActiveCollisionGroup(uint16_t a_collisionGroup) const noexcept = 0;
+
+		/// <summary>
+		/// Checks if the actor's character controller is considered hittable by Precision (the actor is either not "active", or their ragdoll has no collision - e.g. wisps)
+		/// </summary>
+		/// <param name="a_actorHandle">Actor handle</param>
+		/// <returns>Whether the actor's character controller is hittable</returns>
+		[[nodiscard]] virtual bool IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle) const noexcept = 0;
+
+		/// <summary>
+		/// Checks if the character controller is considered hittable by Precision (the actor is either not "active", or their ragdoll has no collision - e.g. wisps)
+		/// </summary>
+		/// <param name="a_characterController">Character controller</param>
+		/// <returns>Whether the character controller is hittable</returns>
+		[[nodiscard]] virtual bool IsCharacterControllerHittable(RE::bhkCharacterController* a_characterController) const noexcept = 0;
+
+		/// <summary>
+		/// Checks if the character controller is considered hittable by Precision (the actor is either not "active", or their ragdoll has no collision - e.g. wisps)
+		/// </summary>
+		/// <param name="a_collisionGroup">Collision group to check</param>
+		/// <returns>Whether the character controller is hittable</returns>
+		[[nodiscard]] virtual bool IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup) const noexcept = 0;
+
+		/// <summary>
+		/// Disables Precision for an actor (removes the ragdoll etc.)
+		/// </summary>
+		/// <param name="a_actorHandle">Actor handle</param>
+		/// <param name="a_bDisable">Whether to disable or remove from the disable list</param>
+		/// <returns>Whether the actor was successfully added or removed from the disable list</returns>
+		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept = 0;
 	};
 
 	typedef void* (*_RequestPluginAPI)(const InterfaceVersion interfaceVersion);
@@ -229,7 +309,7 @@ namespace PRECISION_API
 	/// </summary>
 	/// <param name="a_interfaceVersion">The interface version to request</param>
 	/// <returns>The pointer to the API singleton, or nullptr if request failed</returns>
-	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V2)
+	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V3)
 	{
 		auto pluginHandle = GetModuleHandleA("Precision.dll");
 		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)GetProcAddress(pluginHandle, "RequestPluginAPI");

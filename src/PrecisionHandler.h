@@ -10,8 +10,6 @@
 #include "Settings.h"
 #include "Utils.h"
 
-#include <shared_mutex>
-
 enum CollisionEventType : std::uint8_t
 {
 	kAttackStart = 0,
@@ -19,6 +17,35 @@ enum CollisionEventType : std::uint8_t
 	kRemove,
 	kClearTargets,
 	kAttackEnd
+};
+
+struct CameraShake
+{
+	CameraShake(float a_strength, float a_length, float a_frequency) :
+		strength(a_strength),
+		length(a_length),
+		frequency(a_frequency)
+	{
+		timer = length;
+	}
+
+	bool Update(float a_deltaTime) {
+		currentValue = sinf((length - timer) * frequency) * strength * fmax(length - (length - timer), 0.f);
+		timer -= a_deltaTime;
+
+		return timer > 0.f;
+	}
+	
+	inline float GetCurrentValue() const {
+		return currentValue;
+	}
+	
+private:
+	float currentValue = 0.f;
+	float timer = 0.f;
+	float strength = 0.f;
+	float length = 0.f;
+	float frequency = 0.f;
 };
 
 class PrecisionHandler :
@@ -36,6 +63,8 @@ public:
 	using RequestedAttackCollisionType = PRECISION_API::RequestedAttackCollisionType;
 	using WeaponCollisionCallback = PRECISION_API::WeaponCollisionCallback;
 	using WeaponCollisionCallbackReturn = PRECISION_API::WeaponCollisionCallbackReturn;
+	using CollisionFilterSetupCallback = PRECISION_API::CollisionFilterSetupCallback;
+	using ContactListenerCallback = PRECISION_API::ContactListenerCallback;
 
 	static PrecisionHandler* GetSingleton()
 	{
@@ -70,6 +99,8 @@ public:
 
 	[[nodiscard]] bool HasHitstop(RE::ActorHandle a_actorHandle) const;
 
+	[[nodiscard]] static bool HasActiveImpulse(RE::ActorHandle a_actorHandle);
+
 	void SetStartedDefaultCollisionWithWeaponSwing(RE::ActorHandle a_actorHandle);
 	void SetStartedDefaultCollisionWithWPNSwingUnarmed(RE::ActorHandle a_actorHandle);
 
@@ -97,13 +128,13 @@ public:
 	void AddHitstop(RE::ActorHandle a_refHandle, float a_hitstopLength);
 	[[nodiscard]] float GetHitstop(RE::ActorHandle a_actorHandle, float a_deltaTime, bool a_bUpdate);
 
-	void ApplyCameraShake(float a_strength, float a_length, float a_frequency, const RE::NiPoint3& a_axis);
+	void ApplyCameraShake(float a_strength, float a_length, float a_frequency, float a_distanceSquared);
 
 	void ProcessPrePhysicsStepJobs();
 	void ProcessMainUpdateJobs();
 	void ProcessDelayedJobs(float a_deltaTime);
 
-	bool GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> bIsLeftSwing = std::nullopt) const;
+	bool GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDefinition& a_outAttackDefinition, std::optional<bool> a_bIsLeftSwing = std::nullopt, AttackDefinition::SwingEvent a_swingEvent = AttackDefinition::SwingEvent::kWeaponSwing) const;
 
 	bool ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_event, CollisionEventType a_eventType, CollisionDefinition& a_outCollisionDefinition) const;
 
@@ -121,8 +152,17 @@ public:
 	static std::shared_ptr<ActiveRagdoll> GetActiveRagdollFromDriver(RE::hkbRagdollDriver* a_driver);
 
 	static inline ContactListener contactListener{};
+
+	static inline Lock activeActorsLock;
 	static inline std::unordered_set<RE::ActorHandle> activeActors{};
+	static inline std::unordered_set<uint16_t> activeControllerGroups{};
+
+	static inline Lock hittableCharControllerGroupsLock;
 	static inline std::unordered_set<uint16_t> hittableCharControllerGroups{};
+
+	static inline Lock disabledActorsLock;
+	static inline std::unordered_set<RE::ActorHandle> disabledActors{};
+
 	static inline std::unordered_set<uint16_t> ragdollCollisionGroups{};
 	static inline std::unordered_map<RE::hkbRagdollDriver*, std::shared_ptr<ActiveRagdoll>> activeRagdolls{};
 	static inline std::vector<PendingHit> pendingHits{};
@@ -134,7 +174,6 @@ public:
 	static inline float currentCameraShakeStrength = 0.f;
 	static inline float currentCameraShakeLength = 0.f;
 	static inline float currentCameraShakeFrequency = 0.f;
-	static inline RE::NiPoint3 currentCameraShakeAxis = {};
 
 	static inline CachedAttackData cachedAttackData{};
 
@@ -146,14 +185,27 @@ public:
 	bool AddCollisionFilterComparisonCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterComparisonCallback a_collisionFilterComparisonCallback);
 	bool AddWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback a_weaponCollisionCallback);
 	bool AddWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle, WeaponCollisionCallback a_weaponCollisionCallback);
+	bool AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback a_collisionFilterSetupCallback);
+	bool AddContactListenerCallback(SKSE::PluginHandle a_pluginHandle, ContactListenerCallback a_contactListenerCallback);
 	bool RemovePreHitCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemovePostHitCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemovePrePhysicsStepCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemoveCollisionFilterComparisonCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemoveWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle);
-	bool RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle);	
+	bool RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle);
+	bool RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle);
+	bool RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle);
 
 	[[nodiscard]] float GetAttackCollisionReach(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType = RequestedAttackCollisionType::Default) const;
+
+	[[nodiscard]] static bool IsActorActive(RE::ActorHandle a_actorHandle);
+	[[nodiscard]] static bool IsActorActiveCollisionGroup(uint16_t a_collisionGroup);
+	[[nodiscard]] static bool IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle);
+	[[nodiscard]] static bool IsCharacterControllerHittable(RE::bhkCharacterController* a_controller);
+	[[nodiscard]] static bool IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup);
+
+	[[nodiscard]] static bool IsActorDisabled(RE::ActorHandle a_actorHandle);
+	static bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable);
 
 	std::vector<PreHitCallbackReturn> RunPreHitCallbacks(const PrecisionHitData& a_precisionHitData);
 	void RunPostHitCallbacks(const PrecisionHitData& a_precisionHitData, const RE::HitData& a_hitData);
@@ -161,6 +213,8 @@ public:
 	CollisionFilterComparisonResult RunCollisionFilterComparisonCallbacks(RE::bhkCollisionFilter* a_collisionFilter, uint32_t a_filterInfoA, uint32_t a_filterInfoB);
 	std::vector<WeaponCollisionCallbackReturn> RunWeaponWeaponCollisionCallbacks(const PrecisionHitData& a_precisionHitData);
 	std::vector<WeaponCollisionCallbackReturn> RunWeaponProjectileCollisionCallbacks(const PrecisionHitData& a_precisionHitData);
+	void RunCollisionFilterSetupCallbacks(RE::bhkCollisionFilter* a_collisionFilter);
+	void RunContactListenerCallbacks(const RE::hkpContactPointEvent& a_event);
 
 	struct GenericJob
 	{
@@ -323,10 +377,6 @@ public:
 	}
 
 private:
-	using Lock = std::shared_mutex;
-	using ReadLocker = std::shared_lock<Lock>;
-	using WriteLocker = std::unique_lock<Lock>;
-
 	mutable Lock attackCollisionsLock;
 	mutable Lock callbacksLock;
 	mutable Lock activeHitstopsLock;
@@ -343,6 +393,8 @@ private:
 
 	std::unordered_map<RE::ActorHandle, AttackCollisions> _actorsWithAttackCollisions;
 	std::vector<std::shared_ptr<AttackTrail>> _attackTrails;
+
+	
 
 	std::unordered_map<RE::ActorHandle, float> _actorsInLingeringCombat;
 
@@ -361,6 +413,8 @@ private:
 	std::unordered_map<SKSE::PluginHandle, CollisionFilterComparisonCallback> collisionFilterComparisonCallbacks;
 	std::unordered_map<SKSE::PluginHandle, WeaponCollisionCallback> weaponWeaponCollisionCallbacks;
 	std::unordered_map<SKSE::PluginHandle, WeaponCollisionCallback> weaponProjectileCollisionCallbacks;
+	std::unordered_map<SKSE::PluginHandle, CollisionFilterSetupCallback> collisionFilterSetupCallbacks;
+	std::unordered_map<SKSE::PluginHandle, ContactListenerCallback> contactListenerCallbacks;
 
 	std::vector<std::unique_ptr<GenericJob>> _prePhysicsStepJobs;
 	std::vector<std::unique_ptr<GenericJob>> _mainUpdateJobs;
