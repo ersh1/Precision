@@ -23,8 +23,7 @@ public:
 	static void DrawDebugPoint(const RE::NiPoint3& a_position, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
 	static void DrawCircle(const RE::NiPoint3& a_base, const RE::NiPoint3& a_X, const RE::NiPoint3& a_Y, float a_radius, uint8_t a_numSides, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
 	static void DrawHalfCircle(const RE::NiPoint3& a_base, const RE::NiPoint3& a_X, const RE::NiPoint3& a_Y, float a_radius, uint8_t a_numSides, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
-	//static void DrawDebugCapsule(const RE::NiPoint3& a_center, float a_halfHeight, float a_radius, const RE::NiMatrix3& a_rotation, float a_duration, glm::vec4 a_color);
-	static void DrawDebugCapsule(const RE::NiPoint3& a_center, const RE::NiPoint3& a_firstPoint, const RE::NiPoint3& a_secondPoint, float a_radius, const RE::NiMatrix3& a_rotation, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
+	static void DrawDebugCapsule(const RE::NiPoint3& a_vertexA, const RE::NiPoint3& a_vertexB, float a_radius, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
 	static void DrawDebugSphere(const RE::NiPoint3& a_center, float a_radius, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);
 
 	static void DrawSweptCapsule(const RE::NiPoint3& a_a, const RE::NiPoint3& a_b, const RE::NiPoint3& a_c, const RE::NiPoint3& a_d, float a_radius, const RE::NiMatrix3& a_rotation, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false);

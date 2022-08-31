@@ -144,8 +144,13 @@ namespace Utils
 	{
 		Capsule capsule;
 		if (GetCapsuleParams(a_node, capsule)) {
-			RE::NiPoint3 center = a_node->world.translate;
-			DrawHandler::DrawDebugCapsule(center, capsule.a, capsule.b, capsule.radius, a_node->world.rotate, a_duration, a_color, true);
+			RE::NiPoint3 vertexA = capsule.a;
+			RE::NiPoint3 vertexB = capsule.b;
+
+			vertexA = a_node->world * vertexA;
+			vertexB = a_node->world * vertexB;
+			
+			DrawHandler::DrawDebugCapsule(vertexA, vertexB, capsule.radius, a_duration, a_color, true);
 		}
 	}
 
@@ -158,43 +163,6 @@ namespace Utils
 		auto node = a_actor->Get3D();
 
 		DrawColliders(node, a_duration, a_color);
-
-		// wrong somewhat
-		//if (auto controller = a_actor->GetCharController()) {
-		//	for (auto& bhkShape : controller->shapes) {
-		//		if (bhkShape && bhkShape->referencedObject) {
-		//			auto listShape = static_cast<RE::hkpListShape*>(bhkShape->referencedObject.get());
-		//			if (listShape && listShape->type == RE::hkpShapeType::kList) {
-		//				for (auto& childInfo : listShape->childInfo) {
-		//					if (childInfo.shape && childInfo.shape->type == RE::hkpShapeType::kCapsule) {
-		//						//logger::debug("{}", childInfo.shape->type);
-
-		//						auto capsule = static_cast<const RE::hkpCapsuleShape*>(childInfo.shape);
-		//						float bhkInvWorldScale = *g_worldScaleInverse;
-
-		//						float radius = capsule->radius * bhkInvWorldScale;
-		//						RE::NiPoint3 a = Utils::HkVectorToNiPoint(capsule->vertexA) * bhkInvWorldScale;
-		//						RE::NiPoint3 b = Utils::HkVectorToNiPoint(capsule->vertexB) * bhkInvWorldScale;
-
-		//						RE::hkVector4 controllerPos;
-		//						controller->GetPosition(controllerPos, true);
-		//						RE::NiPoint3 center = Utils::HkVectorToNiPoint(controllerPos) * bhkInvWorldScale;
-
-		//						constexpr RE::NiPoint3 upVector {0.f, 0.f, 1.f};
-		//                              RE::NiMatrix3 matrix;
-		//
-		//                              RE::NiPoint3 forwardVec = Utils::HkVectorToNiPoint(controller->forwardVec);
-
-		//                              Utils::SetRotationMatrix(matrix, -forwardVec.x, forwardVec.y, forwardVec.z);
-		//                              DrawHandler::DrawDebugCapsule(center, a, b, radius,
-		//                                                            matrix,
-		//                                                            a_duration, glm::vec4{1.f, 1.f, 1.f, 1.f}, true);
-		//					}
-		//				}
-		//			}
-		//		}
-		//	}
-		//}
 	}
 
 	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color)
@@ -476,25 +444,6 @@ namespace Utils
 		}
 
 		return ret;
-	}
-
-	void DrawCapsule(RE::bhkRigidBody* a_rigidBody)
-	{
-		auto hkpRigidBody = static_cast<RE::hkpRigidBody*>(a_rigidBody->referencedObject.get());
-		auto capsuleShape = static_cast<const RE::hkpCapsuleShape*>(hkpRigidBody->GetShape());
-
-		RE::NiPoint3 vertexA = Utils::HkVectorToNiPoint(capsuleShape->vertexA) * *g_worldScaleInverse;
-		RE::NiPoint3 vertexB = Utils::HkVectorToNiPoint(capsuleShape->vertexB) * *g_worldScaleInverse;
-
-		float radius = capsuleShape->radius * *g_worldScaleInverse;
-
-		auto& transform = hkpRigidBody->motion.motionState.transform;
-		RE::NiPoint3 origin = Utils::HkVectorToNiPoint(transform.translation * *g_worldScaleInverse);
-		RE::NiQuaternion bodyRotation = Utils::HkQuatToNiQuat(Utils::SetFromRotation(transform.rotation));
-		RE::NiMatrix3 rotNiMatrix = Utils::QuaternionToMatrix(bodyRotation);
-
-		constexpr glm::vec4 weaponCapsuleColor{ 0.3, 0.25, 0.9, 1 };
-		DrawHandler::DrawDebugCapsule(origin, vertexA, vertexB, radius, rotNiMatrix, 0.f, weaponCapsuleColor);
 	}
 
 	bool GetTorsoPos(RE::Actor* a_actor, RE::NiPoint3& point)

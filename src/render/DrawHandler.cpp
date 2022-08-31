@@ -198,97 +198,54 @@ void DrawHandler::DrawHalfCircle(const RE::NiPoint3& a_base, const RE::NiPoint3&
 	}
 }
 
-//void DrawHandler::DrawDebugCapsule(const RE::NiPoint3& a_center, float a_halfHeight, float a_radius, const RE::NiMatrix3& a_rotation, float a_duration, glm::vec4 a_color)
-//{
-//	constexpr int32_t collisionSides = 16;
-//
-//	/*glm::quat q{ a_rotation.w, a_rotation.x, a_rotation.y, a_rotation.z };
-//	glm::mat4 axes = glm::mat4_cast(q);
-//	RE::NiPoint3 xAxis{ axes[0][0], axes[0][1], axes[0][2] };
-//	RE::NiPoint3 yAxis{ axes[1][0], axes[1][1], axes[1][2] };
-//	RE::NiPoint3 zAxis{ axes[2][0], axes[2][1], axes[2][2] };*/
-//	RE::NiPoint3 xAxis{ a_rotation.entry[0][0], a_rotation.entry[0][1], a_rotation.entry[0][2] };
-//	RE::NiPoint3 yAxis{ a_rotation.entry[1][0], a_rotation.entry[1][1], a_rotation.entry[1][2] };
-//	RE::NiPoint3 zAxis{ a_rotation.entry[2][0], a_rotation.entry[2][1], a_rotation.entry[2][2] };
-//
-//	// draw top and bottom circles
-//	float halfAxis = fmax(a_halfHeight - a_radius, 1.f);
-//	RE::NiPoint3 topEnd = a_center + zAxis * halfAxis;
-//	RE::NiPoint3 bottomEnd = a_center - zAxis * halfAxis;
-//
-//	DrawCircle(topEnd, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color);
-//	DrawCircle(bottomEnd, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color);
-//
-//	// draw caps
-//	DrawHalfCircle(topEnd, yAxis, zAxis, a_radius, collisionSides, a_duration, a_color);
-//	DrawHalfCircle(topEnd, xAxis, zAxis, a_radius, collisionSides, a_duration, a_color);
-//
-//	RE::NiPoint3 negZAxis = -zAxis;
-//
-//	DrawHalfCircle(bottomEnd, yAxis, negZAxis, a_radius, collisionSides, a_duration, a_color);
-//	DrawHalfCircle(bottomEnd, xAxis, negZAxis, a_radius, collisionSides, a_duration, a_color);
-//
-//	// draw connected lines
-//	DrawDebugLine(topEnd + xAxis * a_radius, bottomEnd + xAxis * a_radius, a_duration, a_color, true);
-//	DrawDebugLine(topEnd - xAxis * a_radius, bottomEnd - xAxis * a_radius, a_duration, a_color, true);
-//	DrawDebugLine(topEnd + yAxis * a_radius, bottomEnd + yAxis * a_radius, a_duration, a_color, true);
-//	DrawDebugLine(topEnd - yAxis * a_radius, bottomEnd - yAxis * a_radius, a_duration, a_color, true);
-//}
-
-void DrawHandler::DrawDebugCapsule(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_firstPoint, const RE::NiPoint3& a_secondPoint, float a_radius, const RE::NiMatrix3& a_rotation, float a_duration, glm::vec4 a_color, bool a_drawOnTop /*= false */)
+void DrawHandler::DrawDebugCapsule(const RE::NiPoint3& a_vertexA, const RE::NiPoint3& a_vertexB, float a_radius, float a_duration, glm::vec4 a_color, bool a_drawOnTop /*= false*/)
 {
 	constexpr int32_t collisionSides = 16;
 
-	RE::NiPoint3 x{ 1.f, 0.f, 0.f };
-	RE::NiPoint3 y{ 0.f, 1.f, 0.f };
-	RE::NiPoint3 z{ 0.f, 0.f, 1.f };
+	RE::NiPoint3 zAxis = a_vertexA - a_vertexB;
+	zAxis.Unitize();
+
+	// get other axis
+	RE::NiPoint3 upVector = (fabs(zAxis.z) < (1.f - 1.e-4f)) ? RE::NiPoint3{ 0.f, 0.f, 1.f } : RE::NiPoint3{ 1.f, 0.f, 0.f };
+	RE::NiPoint3 xAxis = upVector.UnitCross(zAxis);
+	RE::NiPoint3 yAxis = zAxis.Cross(xAxis);
 
 	// draw top and bottom circles
-	auto rotatedFirstPoint = Utils::TransformVectorByMatrix(a_firstPoint, a_rotation);
-	RE::NiPoint3 topEnd = a_origin + rotatedFirstPoint;
-	auto rotatedSecondPoint = Utils::TransformVectorByMatrix(a_secondPoint, a_rotation);
-	RE::NiPoint3 bottomEnd = a_origin + rotatedSecondPoint;
-
-	x = Utils::TransformVectorByMatrix(x, a_rotation);
-	y = Utils::TransformVectorByMatrix(y, a_rotation);
-	z = Utils::TransformVectorByMatrix(z, a_rotation);
-
-	// fix debug display for horizontal capsules
-	auto xAxis = x;
-	auto yAxis = y;
-	auto zAxis = rotatedFirstPoint - rotatedSecondPoint;
-	zAxis.Unitize();
-	if (fabs(zAxis.Dot(xAxis)) > 0.95f) {
-		xAxis = zAxis.Cross(yAxis);
-		xAxis.Unitize();
-	} else if (fabs(zAxis.Dot(yAxis)) > 0.95f) {
-		yAxis = zAxis.Cross(xAxis);
-		yAxis.Unitize();
-	}
-
-	DrawCircle(topEnd, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
-	DrawCircle(bottomEnd, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
+	DrawCircle(a_vertexA, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color);
+	DrawCircle(a_vertexB, xAxis, yAxis, a_radius, collisionSides, a_duration, a_color);
 
 	// draw caps
-	DrawHalfCircle(topEnd, yAxis, zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
-	DrawHalfCircle(topEnd, xAxis, zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
-	DrawHalfCircle(bottomEnd, yAxis, -zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
-	DrawHalfCircle(bottomEnd, xAxis, -zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
+	DrawHalfCircle(a_vertexA, yAxis, zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
+	DrawHalfCircle(a_vertexA, xAxis, zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
+
+	RE::NiPoint3 negZAxis = -zAxis;
+
+	DrawHalfCircle(a_vertexB, yAxis, negZAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
+	DrawHalfCircle(a_vertexB, xAxis, negZAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
 
 	// draw connected lines
-	DrawDebugLine(topEnd + xAxis * a_radius, bottomEnd + xAxis * a_radius, a_duration, a_color, a_drawOnTop);
-	DrawDebugLine(topEnd - xAxis * a_radius, bottomEnd - xAxis * a_radius, a_duration, a_color, a_drawOnTop);
-	DrawDebugLine(topEnd + yAxis * a_radius, bottomEnd + yAxis * a_radius, a_duration, a_color, a_drawOnTop);
-	DrawDebugLine(topEnd - yAxis * a_radius, bottomEnd - yAxis * a_radius, a_duration, a_color, a_drawOnTop);
+	RE::NiPoint3 start, end;
+	start = a_vertexA + xAxis * a_radius;
+	end = a_vertexB + xAxis * a_radius;
+	DrawDebugLine(start, end, a_duration, a_color, a_drawOnTop);
+	start = a_vertexA - xAxis * a_radius;
+	end = a_vertexB - xAxis * a_radius;
+	DrawDebugLine(start, end, a_duration, a_color, a_drawOnTop);
+	start = a_vertexA + yAxis * a_radius;
+	end = a_vertexB + yAxis * a_radius;
+	DrawDebugLine(start, end, a_duration, a_color, a_drawOnTop);
+	start = a_vertexA - yAxis * a_radius;
+	end = a_vertexB - yAxis * a_radius;
+	DrawDebugLine(start, end, a_duration, a_color, a_drawOnTop);
 
 	//draw bone axis
-	auto capsuleCenter = (topEnd + bottomEnd) / 2;
+	auto capsuleCenter = (a_vertexA + a_vertexB) / 2;
 	constexpr glm::vec4 xColor{ 1, 0, 0, 1 };
 	constexpr glm::vec4 yColor{ 0, 1, 0, 1 };
 	constexpr glm::vec4 zColor{ 0, 0, 1, 1 };
-	DrawDebugLine(capsuleCenter, capsuleCenter + x * 5.f, a_duration, xColor, a_drawOnTop);
-	DrawDebugLine(capsuleCenter, capsuleCenter + y * 5.f, a_duration, yColor, a_drawOnTop);
-	DrawDebugLine(capsuleCenter, capsuleCenter + z * 5.f, a_duration, zColor, a_drawOnTop);
+	DrawDebugLine(capsuleCenter, capsuleCenter + xAxis * 5.f, a_duration, xColor, a_drawOnTop);
+	DrawDebugLine(capsuleCenter, capsuleCenter + yAxis * 5.f, a_duration, yColor, a_drawOnTop);
+	DrawDebugLine(capsuleCenter, capsuleCenter + zAxis * 5.f, a_duration, zColor, a_drawOnTop);
 }
 
 void DrawHandler::DrawDebugSphere(const RE::NiPoint3& a_center, float a_radius, float a_duration, glm::vec4 a_color, bool a_drawOnTop /*= false */)

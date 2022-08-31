@@ -240,8 +240,6 @@ namespace Utils
 		return ret;
 	}
 
-	void DrawCapsule(RE::bhkRigidBody* a_rigidBody);
-
 	[[nodiscard]] bool GetTorsoPos(RE::Actor* a_actor, RE::NiPoint3& point);
 
 	RE::NiTransform GetLocalTransform(RE::NiAVObject* a_node, const RE::NiTransform& a_worldTransform, bool a_bUseOldParentTransform = false);

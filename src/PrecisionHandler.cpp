@@ -199,9 +199,9 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 
 void PrecisionHandler::Update(float a_deltaTime)
 {
-	if (!Settings::bAttackCollisionsEnabled || Settings::bDisableMod) {
+	/*if (!Settings::bAttackCollisionsEnabled || Settings::bDisableMod) {
 		Clear();
-	}
+	}*/
 
 	if (RE::UI::GetSingleton()->GameIsPaused()) {
 		return;
