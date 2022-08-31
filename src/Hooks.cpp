@@ -726,7 +726,7 @@ namespace Hooks
 		}
 
 		{
-			RE::BSSpinLockGuard(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 
 			if (animGraphManager->graphs.size() <= 0) {
 				return false;
@@ -779,7 +779,7 @@ namespace Hooks
 		}
 
 		{
-			RE::BSSpinLockGuard(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 
 			if (animGraphManager->graphs.size() <= 0) {
 				return false;
@@ -818,7 +818,7 @@ namespace Hooks
 
 		if (bHasRagdollInterface) {
 			{
-				RE::BSSpinLockGuard(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					auto& driver = graph->characterInstance.ragdollDriver;
 					if (driver) {
@@ -848,7 +848,7 @@ namespace Hooks
 			}
 
 			{
-				RE::BSSpinLockGuard(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					if (graph->AddRagdollToWorld()) {
 						break;
@@ -859,7 +859,7 @@ namespace Hooks
 			ModifyConstraints(actor);
 
 			{
-				RE::BSSpinLockGuard(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					graph->SetRagdollConstraintsFromBhkConstraints();
 				}
@@ -889,7 +889,7 @@ namespace Hooks
 
 		if (bHasRagdollInterface) {
 			{
-				RE::BSSpinLockGuard(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					if (graph->RemoveRagdollFromWorld()) {
 						break;
@@ -898,7 +898,7 @@ namespace Hooks
 			}
 
 			{
-				RE::BSSpinLockGuard(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					auto& driver = graph->characterInstance.ragdollDriver;
 					if (driver) {
@@ -991,7 +991,7 @@ namespace Hooks
 		}
 
 		if (bHasRagdollInterface) {
-			RE::BSSpinLockGuard(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 			for (auto& graph : animGraphManager->graphs) {
 				graph->ToggleSyncOnUpdate(true);
 			}
@@ -1072,7 +1072,7 @@ namespace Hooks
 			return;
 		}
 
-		RE::BSSpinLockGuard(animGraphManager->updateLock);
+		RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 		RE::hkbGeneratorOutput::TrackHeader* worldFromModelHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_WORLD_FROM_MODEL);
@@ -1353,7 +1353,7 @@ namespace Hooks
 		}
 		
 		{
-			RE::BSSpinLockGuard(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 
 			RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 			if (poseHeader && poseHeader->onFraction > 0.f) {
@@ -1398,7 +1398,7 @@ namespace Hooks
 			return;
 		}
 		
-		RE::BSSpinLockGuard(animGraphManager->updateLock);
+		RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
 
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 
