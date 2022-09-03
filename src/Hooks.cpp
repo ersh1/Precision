@@ -835,13 +835,16 @@ namespace Hooks
 							}
 						}
 
-						auto activeRagdoll = std::make_shared<ActiveRagdoll>();
-						PrecisionHandler::activeRagdolls.emplace(driver.get(), activeRagdoll);
-
-						if (!graph->physicsWorld) {
-							// World must be set before calling BShkbAnimationGraph::AddRagdollToWorld(), and is required for the graph to register its physics step listener (and hence call hkbRagdollDriver::driveToPose())
-							graph->physicsWorld = actor->parentCell->GetbhkWorld();
-							activeRagdoll->shouldNullOutWorldWhenRemovingFromWorld = true;
+						{
+							WriteLocker locker(PrecisionHandler::activeRagdollsLock);
+							auto activeRagdoll = std::make_shared<ActiveRagdoll>();
+							PrecisionHandler::activeRagdolls.emplace(driver.get(), activeRagdoll);
+						
+							if (!graph->physicsWorld) {
+								// World must be set before calling BShkbAnimationGraph::AddRagdollToWorld(), and is required for the graph to register its physics step listener (and hence call hkbRagdollDriver::driveToPose())
+								graph->physicsWorld = actor->parentCell->GetbhkWorld();
+								activeRagdoll->shouldNullOutWorldWhenRemovingFromWorld = true;
+							}
 						}
 					}
 				}
@@ -908,10 +911,15 @@ namespace Hooks
 							}
 						}
 
-						PrecisionHandler::activeRagdolls.erase(driver.get());
-
-						WriteLocker locker(PrecisionHandler::activeActorsLock);
-						PrecisionHandler::activeActors.erase(a_actorHandle);
+						{
+							WriteLocker locker(PrecisionHandler::activeRagdollsLock);
+							PrecisionHandler::activeRagdolls.erase(driver.get());
+						}
+						
+						{
+							WriteLocker locker(PrecisionHandler::activeActorsLock);
+							PrecisionHandler::activeActors.erase(a_actorHandle);
+						}			
 
 						uint32_t filterInfo = 0;
 						auto charController = actor->GetCharController();
@@ -1067,13 +1075,6 @@ namespace Hooks
 			return;
 		}
 
-		RE::BSAnimationGraphManagerPtr animGraphManager;
-		if (!actor->GetAnimationGraphManager(animGraphManager)) {
-			return;
-		}
-
-		RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
-
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 		RE::hkbGeneratorOutput::TrackHeader* worldFromModelHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_WORLD_FROM_MODEL);
 		RE::hkbGeneratorOutput::TrackHeader* keyframedBonesHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_KEYFRAMED_RAGDOLL_BONES);
@@ -1137,15 +1138,13 @@ namespace Hooks
 		ragdoll->isOn = true;
 		if (!isRigidBodyOn) {
 			ragdoll->isOn = false;
-			ragdoll->wantKeyframe = true;
 			ragdoll->state = RagdollState::kKeyframed;  // reset state
 			return;
 		}
 
 		if (Settings::bEnableKeyframes) {
 			if (keyframedBonesHeader && keyframedBonesHeader->onFraction > 0.f) {
-				if (ragdoll->state == RagdollState::kKeyframed && ragdoll->wantKeyframe) {
-					ragdoll->wantKeyframe = false;
+				if (ragdoll->state == RagdollState::kKeyframed) {
 					SetBonesKeyframedReporting(a_driver, a_generatorOutput, *keyframedBonesHeader);
 				} else if (ragdoll->elapsedTime <= Settings::fBlendInKeyframeTime) {
 					SetBonesKeyframedReporting(a_driver, a_generatorOutput, *keyframedBonesHeader);
@@ -1347,22 +1346,13 @@ namespace Hooks
 		if (!ragdoll->isOn)
 			return;
 
-		RE::BSAnimationGraphManagerPtr animGraphManager;
-		if (!actor->GetAnimationGraphManager(animGraphManager)) {
-			return;
-		}
-		
-		{
-			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
-
-			RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
-			if (poseHeader && poseHeader->onFraction > 0.f) {
-				int numPoses = poseHeader->numData;
-				RE::hkQsTransform* animPose = (RE::hkQsTransform*)Track_getData(a_generatorInOut, *poseHeader);
-				// Copy anim pose track before postPhysics() as postPhysics() will overwrite it with the ragdoll pose
-				ragdoll->animPose.assign(animPose, animPose + numPoses);
-			}
-		}		
+		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
+		if (poseHeader && poseHeader->onFraction > 0.f) {
+			int numPoses = poseHeader->numData;
+			RE::hkQsTransform* animPose = (RE::hkQsTransform*)Track_getData(a_generatorInOut, *poseHeader);
+			// Copy anim pose track before postPhysics() as postPhysics() will overwrite it with the ragdoll pose
+			ragdoll->animPose.assign(animPose, animPose + numPoses);
+		}	
 
 		if (Settings::bDisableGravityForActiveRagdolls) {
 			if (!actor->IsInRagdollState() && !Utils::IsActorGettingUp(actor)) {
@@ -1393,13 +1383,6 @@ namespace Hooks
 
 		RagdollState state = ragdoll->state;
 
-		RE::BSAnimationGraphManagerPtr animGraphManager;
-		if (!actor->GetAnimationGraphManager(animGraphManager)) {
-			return;
-		}
-		
-		RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
-
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 
 		if (Settings::bLoosenRagdollContraintsToMatchPose) {
@@ -1416,11 +1399,6 @@ namespace Hooks
 
 			// Copy pose track now since postPhysics() just set it to the high-res ragdoll pose
 			ragdoll->ragdollPose.assign(poseOut, poseOut + numPoses);
-
-			if (ragdoll->state == RagdollState::kKeyframed) {
-				// When in keyframed state, force the output pose to be the anim pose
-				memcpy(poseOut, ragdoll->animPose.data(), numPoses * sizeof(RE::hkQsTransform));
-			}
 		}
 
 		Blender& blender = ragdoll->blender;
@@ -1433,7 +1411,6 @@ namespace Hooks
 				if (state == RagdollState::kBlendIn) {
 					state = RagdollState::kRagdoll;
 				} else if (state == RagdollState::kBlendOut) {
-					ragdoll->wantKeyframe = true;
 					state = RagdollState::kKeyframed;
 				}
 			}

@@ -27,7 +27,6 @@ struct ActiveRagdoll
 	RagdollState state = RagdollState::kKeyframed;
 	KnockState knockState = KnockState::kNormal;
 	bool isOn = false;
-	bool wantKeyframe = true;
 	bool hasHipBoneTransform = false;
 	bool shouldNullOutWorldWhenRemovingFromWorld = false;
 

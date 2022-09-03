@@ -164,7 +164,10 @@ public:
 	static inline std::unordered_set<RE::ActorHandle> disabledActors{};
 
 	static inline std::unordered_set<uint16_t> ragdollCollisionGroups{};
+
+	static inline Lock activeRagdollsLock;
 	static inline std::unordered_map<RE::hkbRagdollDriver*, std::shared_ptr<ActiveRagdoll>> activeRagdolls{};
+	
 	static inline std::vector<PendingHit> pendingHits{};
 	static inline std::unordered_map<RE::ActorHandle, float> activeHitstops;
 

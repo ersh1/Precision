@@ -855,7 +855,11 @@ void PrecisionHandler::Clear()
 		PrecisionHandler::disabledActors.clear();
 	}
 	
-	PrecisionHandler::activeRagdolls.clear();
+	{
+		WriteLocker locker(activeRagdollsLock);
+		PrecisionHandler::activeRagdolls.clear();
+	}
+	
 	PrecisionHandler::ragdollCollisionGroups.clear();
 	PrecisionHandler::contactListener = ContactListener{};
 }
@@ -1641,6 +1645,8 @@ float PrecisionHandler::GetNodeAttackRadius(RE::ActorHandle a_actorHandle, RE::N
 
 std::shared_ptr<ActiveRagdoll> PrecisionHandler::GetActiveRagdollFromDriver(RE::hkbRagdollDriver* a_driver)
 {
+	ReadLocker locker(activeRagdollsLock);
+	
 	auto search = activeRagdolls.find(a_driver);
 	if (search != activeRagdolls.end()) {
 		return search->second;
