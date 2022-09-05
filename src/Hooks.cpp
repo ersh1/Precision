@@ -1159,7 +1159,7 @@ namespace Hooks
 		float deltaTime = *g_deltaTime;
 		if (deltaTime > 0.f) {  // avoid division by zero
 			constexpr float div = 1.f / 60.f;
-			deltaTimeMult = div / *g_deltaTime;
+			deltaTimeMult = div / deltaTime;
 		}		
 
 		if (rigidBodyHeader && rigidBodyHeader->onFraction > 0.f && rigidBodyHeader->numData > 0) {
@@ -1399,6 +1399,11 @@ namespace Hooks
 
 			// Copy pose track now since postPhysics() just set it to the high-res ragdoll pose
 			ragdoll->ragdollPose.assign(poseOut, poseOut + numPoses);
+
+			if (ragdoll->state == RagdollState::kKeyframed && ragdoll->animPose.size() > 0) {
+				// When in keyframed state, force the output pose to be the anim pose
+				memcpy(poseOut, ragdoll->animPose.data(), ragdoll->animPose.size() * sizeof(RE::hkQsTransform));
+			}
 		}
 
 		Blender& blender = ragdoll->blender;

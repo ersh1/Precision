@@ -386,12 +386,14 @@ void PrecisionHandler::ApplyCameraShake(float a_strength, float a_length, float 
 		a_strength *= strengthMult;
 	}	
 
-	if (currentCameraShakeStrength / a_strength < 0.8f) {
-		bCameraShakeActive = true;
-		currentCameraShakeStrength = a_strength;
-		currentCameraShakeLength = a_length;
-		currentCameraShakeFrequency = a_frequency;
-		currentCameraShakeTimer = a_length;
+	if (a_strength > 0.f) {
+		if (currentCameraShakeStrength / a_strength < 0.8f) {
+			bCameraShakeActive = true;
+			currentCameraShakeStrength = a_strength;
+			currentCameraShakeLength = a_length;
+			currentCameraShakeFrequency = a_frequency;
+			currentCameraShakeTimer = a_length;
+		}
 	}
 }
 
@@ -1545,7 +1547,7 @@ bool PrecisionHandler::GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE
 		}
 	}
 
-	if (length > 0.f) {
+	if (length > 0.f && originalLength > 0.f) {
 		finalLengthMult *= length / originalLength;
 	}
 

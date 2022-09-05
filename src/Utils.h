@@ -51,6 +51,12 @@ namespace Utils
 	void NiMatrixToHkMatrix(const RE::NiMatrix3& a_niMat, RE::hkMatrix3& a_hkMat);
 	void HkMatrixToNiMatrix(const RE::hkMatrix3& a_hkMat, RE::NiMatrix3& a_niMat);
 
+	[[nodiscard]] RE::hkTransform NiTransformToHkTransform(const RE::NiTransform& a_niTransform);
+	[[nodiscard]] RE::NiTransform HkTransformToNiTransform(const RE::hkTransform& a_hkTransform);
+
+	[[nodiscard]] RE::hkQsTransform NiTransformToHkQsTransform(const RE::NiTransform& a_niTransform);
+	[[nodiscard]] RE::NiTransform HkQsTransformToNiTransform(const RE::hkQsTransform& a_hkQsTransform);
+
 	RE::NiMatrix3 QuaternionToMatrix(const RE::NiQuaternion& a_quat);
 
 	inline void SetRotatedDir(RE::hkVector4& vec, const RE::hkQuaternion& quat, const RE::hkVector4& direction)
@@ -271,4 +277,6 @@ namespace Utils
 
 	// thanks dTRY
 	[[nodiscard]] std::vector<std::string_view> Tokenize(std::string_view a_string, const char a_delimiter);
+
+	void SetBonesKeyframed(RE::hkbRagdollDriver* a_driver);
 }

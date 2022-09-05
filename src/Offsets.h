@@ -133,6 +133,9 @@ static REL::Relocation<tGetNiObjectFromCollidable> GetNiObjectFromCollidable{ RE
 typedef void (*tbhkRigidBody_setMotionType)(RE::bhkRigidBody* a_this, RE::hkpMotion::MotionType a_newState, RE::hkpEntityActivation a_preferredActivationState, RE::hkpUpdateCollisionFilterOnEntityMode a_collisionFilterUpdateMode);
 static REL::Relocation<tbhkRigidBody_setMotionType> bhkRigidBody_setMotionType{ RELOCATION_ID(76247, 78077) };  // DB30C0, DF37F0
 
+typedef void (*thkpRigidBody_setMotionType)(RE::hkpRigidBody* a_this, RE::hkpMotion::MotionType a_newState, RE::hkpEntityActivation a_preferredActivationState, RE::hkpUpdateCollisionFilterOnEntityMode a_collisionFilterUpdateMode);
+static REL::Relocation<thkpRigidBody_setMotionType> hkpRigidBody_setMotionType{ RELOCATION_ID(60153, 60908) };  // A6EB30, A93340
+
 typedef bool (*tbhkRefObject_ctor)(RE::bhkRefObject* a_this);
 static REL::Relocation<tbhkRefObject_ctor> bhkRefObject_ctor{ RELOCATION_ID(76771, 78647) };  // DDC1E0, E1D5D0
 
@@ -207,6 +210,7 @@ static REL::Relocation<thkRotation_setFromQuat> hkRotation_setFromQuat{ RELOCATI
 
 typedef void (*thkpKeyFrameUtility_applyHardKeyFrame)(const RE::hkVector4& a_nextPosition, const RE::hkQuaternion& a_nextOrientation, float a_invDeltaTime, RE::hkpRigidBody* a_body);
 static REL::Relocation<thkpKeyFrameUtility_applyHardKeyFrame> hkpKeyFrameUtility_applyHardKeyFrame{ RELOCATION_ID(61579, 62478) };  // ABC3D0, AE0BE0
+static REL::Relocation<thkpKeyFrameUtility_applyHardKeyFrame> hkpKeyFrameUtility_applyHardKeyFrameAsynchronously{ RELOCATION_ID(61580, 62479) };  // ABC700, AE0F10
 
 typedef void (*tbhkNiCollisionObject_ctor)(RE::bhkNiCollisionObject* a_this);
 static REL::Relocation<tbhkNiCollisionObject_ctor> bhkNiCollisionObject_ctor{ RELOCATION_ID(76530, 78372) };  // DC59A0, E05EE0
@@ -281,7 +285,7 @@ static REL::Relocation<tGetEnchantment> GetEnchantment{ RELOCATION_ID(15788, 160
 typedef RE::MagicItem* (*tGetPoison)(RE::InventoryEntryData* a_item);
 static REL::Relocation<tGetPoison> GetPoison{ RELOCATION_ID(15761, 15999) };  // 1D69C0, 1E2250
 
-typedef RE::ActorValue (*tGetActorValueForCost)(RE::MagicItem* a_item, bool a_bIsRightHand);
+typedef RE::ActorValue (*tGetActorValueForCost)(RE::MagicItem* a_item, RE::MagicSystem::CastingSource a_castingSource);
 static REL::Relocation<tGetActorValueForCost> GetActorValueForCost{ RELOCATION_ID(33817, 34609) };  // 556780, 572200
 
 typedef void (*tNiBound_Combine)(RE::NiBound& a_this, const RE::NiBound& a_other);

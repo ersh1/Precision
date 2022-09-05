@@ -260,7 +260,7 @@ struct Settings
 	static inline float fPoweredProportionalRecoveryVelocity = 5.f;
 	static inline float fPoweredConstantRecoveryVelocity = 0.2f;
 	static inline bool bCopyFootIkToPoseTrack = true;
-	static inline bool bDoWarp = true;
+	static inline bool bDoWarp = false;
 	static inline float fMaxAllowedDistBeforeWarp = 3.f;
 	static inline float fHitImpulseFeetDistanceThreshold = 20.f;
 	static inline bool bEnableWaterSplashes = false;

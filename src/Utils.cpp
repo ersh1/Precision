@@ -62,6 +62,16 @@ namespace Utils
 		ret.rotation = MultiplyQuaternions(a_first.rotation, a_second.rotation);
 		ret.scale = a_first.scale * a_second.scale;
 		return ret;
+
+		/*auto first = Utils::HkQsTransformToNiTransform(a_first);
+		auto second = Utils::HkQsTransformToNiTransform(a_second);
+
+		auto multiplied = first * second;
+		auto result = Utils::NiTransformToHkQsTransform(multiplied);
+
+		result.scale = a_first.scale * a_second.scale;
+
+		return result;*/
 	}
 
 	void NiMatrixToHkMatrix(const RE::NiMatrix3& a_niMat, RE::hkMatrix3& a_hkMat)
@@ -77,13 +87,53 @@ namespace Utils
 		a_niMat.entry[1][0] = a_hkMat.col0.quad.m128_f32[1];
 		a_niMat.entry[2][0] = a_hkMat.col0.quad.m128_f32[2];
 
-		a_niMat.entry[0][1] = a_hkMat.col0.quad.m128_f32[0];
-		a_niMat.entry[1][1] = a_hkMat.col0.quad.m128_f32[1];
-		a_niMat.entry[2][1] = a_hkMat.col0.quad.m128_f32[2];
+		a_niMat.entry[0][1] = a_hkMat.col1.quad.m128_f32[0];
+		a_niMat.entry[1][1] = a_hkMat.col1.quad.m128_f32[1];
+		a_niMat.entry[2][1] = a_hkMat.col1.quad.m128_f32[2];
 
-		a_niMat.entry[0][2] = a_hkMat.col0.quad.m128_f32[0];
-		a_niMat.entry[1][2] = a_hkMat.col0.quad.m128_f32[1];
-		a_niMat.entry[2][2] = a_hkMat.col0.quad.m128_f32[2];
+		a_niMat.entry[0][2] = a_hkMat.col2.quad.m128_f32[0];
+		a_niMat.entry[1][2] = a_hkMat.col2.quad.m128_f32[1];
+		a_niMat.entry[2][2] = a_hkMat.col2.quad.m128_f32[2];
+	}
+
+	RE::hkTransform NiTransformToHkTransform(const RE::NiTransform& a_niTransform)
+	{
+		RE::hkTransform result;
+		Utils::NiMatrixToHkMatrix(a_niTransform.rotate, result.rotation);
+		result.translation = Utils::NiPointToHkVector(a_niTransform.translate * *g_worldScale);
+
+		return result;
+	}
+
+	RE::NiTransform HkTransformToNiTransform(const RE::hkTransform& a_hkTransform)
+	{
+		RE::NiTransform result;
+		Utils::HkMatrixToNiMatrix(a_hkTransform.rotation, result.rotate);
+		result.translate = Utils::HkVectorToNiPoint(a_hkTransform.translation * *g_worldScaleInverse);
+		result.scale = 1.f;
+
+		return result;
+	}
+
+	RE::hkQsTransform NiTransformToHkQsTransform(const RE::NiTransform& a_niTransform)
+	{
+		RE::hkQsTransform result;
+		result.rotation = Utils::NiQuatToHkQuat(Utils::MatrixToQuaternion(a_niTransform.rotate));
+		result.translation = Utils::NiPointToHkVector(a_niTransform.translate * *g_worldScale);
+		result.scale = a_niTransform.scale;
+
+		return result;
+	}
+
+	RE::NiTransform HkQsTransformToNiTransform(const RE::hkQsTransform& a_hkQsTransform)
+	{
+		RE::NiTransform result;
+
+		result.rotate = Utils::QuaternionToMatrix(Utils::HkQuatToNiQuat(a_hkQsTransform.rotation));
+		result.translate = Utils::HkVectorToNiPoint(a_hkQsTransform.translation * *g_worldScaleInverse);
+		result.scale = a_hkQsTransform.scale.quad.m128_f32[0];
+
+		return result;
 	}
 
 	RE::NiMatrix3 QuaternionToMatrix(const RE::NiQuaternion& a_quat)
@@ -144,13 +194,24 @@ namespace Utils
 	{
 		Capsule capsule;
 		if (GetCapsuleParams(a_node, capsule)) {
-			RE::NiPoint3 vertexA = capsule.a;
-			RE::NiPoint3 vertexB = capsule.b;
 
-			vertexA = a_node->world * vertexA;
-			vertexB = a_node->world * vertexB;
-			
-			DrawHandler::DrawDebugCapsule(vertexA, vertexB, capsule.radius, a_duration, a_color, true);
+			if (a_node && a_node->collisionObject) {
+				auto collisionObject = static_cast<RE::bhkCollisionObject*>(a_node->collisionObject.get());
+				auto rigidBody = collisionObject->GetRigidBody();
+				if (rigidBody && rigidBody->referencedObject) {
+					RE::hkpRigidBody* hkpRigidBody = static_cast<RE::hkpRigidBody*>(rigidBody->referencedObject.get());
+					auto& hkTransform = hkpRigidBody->motion.motionState.transform;
+					RE::NiTransform transform = Utils::HkTransformToNiTransform(hkTransform);
+
+					RE::NiPoint3 vertexA = capsule.a;
+					RE::NiPoint3 vertexB = capsule.b;
+
+					vertexA = transform * vertexA;
+					vertexB = transform * vertexB;
+
+					DrawHandler::DrawDebugCapsule(vertexA, vertexB, capsule.radius, a_duration, a_color, true);
+				}
+			}		
 		}
 	}
 
@@ -264,7 +325,9 @@ namespace Utils
 		if (node) {
 			for (auto& child : node->children) {
 				if (child) {
-					return GetFirstRigidBody(child.get());
+					if (auto childRb = GetFirstRigidBody(child.get())) {
+						return childRb;
+					}
 				}
 			}
 		}
@@ -721,4 +784,20 @@ namespace Utils
 
 		return output;
 	}
+
+	void SetBonesKeyframed(RE::hkbRagdollDriver* a_driver)
+	{
+		if (a_driver && a_driver->ragdoll) {
+			for (auto& rigidBody : a_driver->ragdoll->rigidBodies) {
+				auto node = GetNiObjectFromCollidable(rigidBody->GetCollidable());
+				if (node) {
+					auto wrapper = Utils::GetRigidBody(node);
+					if (wrapper) {
+						bhkRigidBody_setMotionType(wrapper, RE::hkpMotion::MotionType::kKeyframed, RE::hkpEntityActivation::kDoActivate, RE::hkpUpdateCollisionFilterOnEntityMode::kFullCheck);
+					}
+				}
+			}
+		}
+	}
+
 }

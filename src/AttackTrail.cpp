@@ -16,8 +16,7 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 		collisionNodeLocalTransform = collisionNode->local;
 		//collisionNodeLocalTransform.rotate = collisionNodeLocalTransform.rotate * weaponRotation;
 		
-		std::string_view trailMeshPath = Settings::attackTrailMeshPath;
-		std::optional<std::string_view> additionalEmitterPath;
+		std::string trailMeshPath = Settings::attackTrailMeshPath;
 
 		if (a_trailOverride) {
 			if (a_trailOverride->lifetimeMult) {
@@ -87,7 +86,12 @@ void AttackTrail::Update(float a_deltaTime)
 
 		if (!bExpired && !collisionNode->parent) {
 			bExpired = true;
-			visibilityPercent += (Settings::fTrailSegmentLifetime * lifetimeMult) * (1.f / Settings::fTrailFadeOutTime);
+
+			if (Settings::fTrailFadeOutTime > 0.f) {
+				visibilityPercent += (Settings::fTrailSegmentLifetime * lifetimeMult) * (1.f / Settings::fTrailFadeOutTime);
+			} else {
+				visibilityPercent = 0.f;
+			}
 		}
 
 		constexpr RE::NiPoint3 forwardVector{ 1.f, 0.f, 0.f };
@@ -101,7 +105,11 @@ void AttackTrail::Update(float a_deltaTime)
 		if (trailParticle && trailParticle->particleObject) {
 			if (!bAppliedTrailColorSettings || bExpired) {
 				if (bExpired) {
-					visibilityPercent = std::fmax(visibilityPercent - (1.f / Settings::fTrailFadeOutTime) * a_deltaTime, 0.f);
+					if (Settings::fTrailFadeOutTime > 0.f) {
+						visibilityPercent = std::fmax(visibilityPercent - (1.f / Settings::fTrailFadeOutTime) * a_deltaTime, 0.f);
+					} else {
+						visibilityPercent = 0.f;
+					}					
 				}
 
 				// apply color settings to trail
@@ -318,7 +326,9 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 				}
 			}
 
-			auto actorValueForCost = GetActorValueForCost(magicItem, !a_bIsLeftHand);
+			RE::MagicSystem::CastingSource castingSource = a_bIsLeftHand ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand;
+
+			auto actorValueForCost = GetActorValueForCost(magicItem, castingSource);
 			if (actorValueForCost != RE::ActorValue::kNone) {
 				auto cost = magicItem->CalculateMagickaCost(actor.get());
 				if (actor->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
@@ -434,7 +444,9 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 				}
 			}
 
-			auto actorValueForCost = GetActorValueForCost(magicItem, !a_bIsLeftHand);
+			RE::MagicSystem::CastingSource castingSource = a_bIsLeftHand ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand;
+
+			auto actorValueForCost = GetActorValueForCost(magicItem, castingSource);
 			if (actorValueForCost != RE::ActorValue::kNone) {
 				auto cost = magicItem->CalculateMagickaCost(actor.get());
 				if (actor->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
