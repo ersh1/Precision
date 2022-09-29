@@ -421,7 +421,7 @@ namespace Utils
 		if (auto actor = a_actorHandle.get()) {
 			float ret = 0.f;
 			RE::TESBoundObject* object = nullptr;
-			if (auto inventoryEntryData = AIProcess_GetCurrentlyEquippedWeapon(actor->currentProcess, a_bIsLeftHand)) {
+			if (auto inventoryEntryData = AIProcess_GetCurrentlyEquippedWeapon(actor->GetActorRuntimeData().currentProcess, a_bIsLeftHand)) {
 				object = inventoryEntryData->object;
 			}
 			ApplyPerkEntryPoint(RE::BGSEntryPointPerkEntry::EntryPoint::kSetSweepAttack, actor.get(), object, ret);
@@ -435,7 +435,7 @@ namespace Utils
 	{
 		RE::BSAnimationGraphManagerPtr animGraphManager;
 		if (a_refr->GetAnimationGraphManager(animGraphManager)) {
-			RE::BSSpinLockGuard(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 			for (auto& graph : animGraphManager->graphs) {
 				auto& driver = graph.get()->characterInstance.ragdollDriver;
 				if (driver) {
@@ -515,7 +515,7 @@ namespace Utils
 			return false;
 		}
 
-		RE::TESRace* race = a_actor->race;
+		RE::TESRace* race = a_actor->GetRace();
 		if (!race) {
 			return false;
 		}
@@ -727,7 +727,7 @@ namespace Utils
 		RE::BSAnimationGraphManagerPtr graphManager = nullptr;
 		a_actor->GetAnimationGraphManager(graphManager);
 		if (graphManager) {
-			if (auto BSgraph = graphManager->graphs[graphManager->activeGraph]) {
+			if (auto BSgraph = graphManager->graphs[graphManager->GetRuntimeData().activeGraph]) {
 				if (auto graph = BSgraph->behaviorGraph) {
 					auto activeNodes = reinterpret_cast<RE::NodeList**>(&graph->activeNodes);
 					if (activeNodes) {

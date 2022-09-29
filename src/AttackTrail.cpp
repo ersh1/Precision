@@ -331,7 +331,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			auto actorValueForCost = GetActorValueForCost(magicItem, castingSource);
 			if (actorValueForCost != RE::ActorValue::kNone) {
 				auto cost = magicItem->CalculateMagickaCost(actor.get());
-				if (actor->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
+				if (actor->AsActorValueOwner()->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
 					if (auto effect = magicItem->GetCostliestEffectItem()) {
 						if (effect->baseEffect) {
 							// check effect names
@@ -449,7 +449,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			auto actorValueForCost = GetActorValueForCost(magicItem, castingSource);
 			if (actorValueForCost != RE::ActorValue::kNone) {
 				auto cost = magicItem->CalculateMagickaCost(actor.get());
-				if (actor->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
+				if (actor->AsActorValueOwner()->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
 
 					auto checkEffect = [&](RE::Effect* a_effect) {
 						if (!a_effect) {

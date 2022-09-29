@@ -223,7 +223,7 @@ namespace Utils
 
 	[[nodiscard]] inline bool IsMoveableEntity(RE::hkpEntity* entity) { return IsMotionTypeMoveable(entity->motion.type.underlying()); }
 
-	[[nodiscard]] inline bool IsActorGettingUp(RE::Actor* a_actor) { return a_actor->GetKnockState() == RE::KNOCK_STATE_ENUM::kGetUp; }
+	[[nodiscard]] inline bool IsActorGettingUp(RE::Actor* a_actor) { return a_actor->AsActorState()->GetKnockState() == RE::KNOCK_STATE_ENUM::kGetUp; }
 
 	// returns true if actor is player's teammate, summon, or teammate's summon
 	[[nodiscard]] bool IsPlayerTeammateOrSummon(RE::Actor* a_actor);

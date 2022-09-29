@@ -76,7 +76,7 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 		return EventResult::kContinue;
 	}
 
-	uint32_t activeGraphIdx = graphManager->activeGraph;
+	uint32_t activeGraphIdx = graphManager->GetRuntimeData().activeGraph;
 
 	if (graphManager->graphs[activeGraphIdx] && graphManager->graphs[activeGraphIdx].get() != a_eventSource) {
 		return EventResult::kContinue;
@@ -1014,8 +1014,9 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		attackEvent = attackData->event;
 	} else {
 		attackEvent = "DEFAULT_UNARMED"sv;
-		if (a_actor->currentProcess && a_actor->currentProcess->middleHigh) {
-			auto equipment = a_bIsLeftSwing ? a_actor->currentProcess->middleHigh->leftHand : a_actor->currentProcess->middleHigh->rightHand;
+		auto currentProcess = a_actor->GetActorRuntimeData().currentProcess;
+		if (currentProcess && currentProcess->middleHigh) {
+			auto equipment = a_bIsLeftSwing ? currentProcess->middleHigh->leftHand : currentProcess->middleHigh->rightHand;
 			if (equipment && equipment->object) {
 				if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
 					if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {
@@ -1870,7 +1871,8 @@ float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, R
 			}
 
 			if (a_collisionType != RequestedAttackCollisionType::Current) {  // actor has no active collisions, calculate a default capsule length
-				if (actor->currentProcess && actor->currentProcess->middleHigh) {
+				auto currentProcess = actor->GetActorRuntimeData().currentProcess;
+				if (currentProcess && currentProcess->middleHigh) {
 					AttackDefinition attackDefinition;
 					
 					bool bIsLeftHand;
@@ -1890,7 +1892,7 @@ float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, R
 								collisionScale *= *collisionDef.lengthMult;
 							}
 							if (collisionDef.nodeName == "WEAPON"sv || collisionDef.nodeName == "SHIELD"sv) {
-								auto equipment = bIsLeftHand ? actor->currentProcess->middleHigh->leftHand : actor->currentProcess->middleHigh->rightHand;
+								auto equipment = bIsLeftHand ? currentProcess->middleHigh->leftHand : currentProcess->middleHigh->rightHand;
 								if (equipment && equipment->object) {
 									if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
 										if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {

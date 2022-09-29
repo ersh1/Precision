@@ -193,7 +193,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 					if (rightWeaponType > 0 && rightWeaponType < 7) {  // 1h & 2h melee
 						bool bIsCloseEnough = bIsFirstPerson ? RE::PlayerCamera::GetSingleton()->cameraRoot->world.translate.GetDistance(niHitPos) <= Settings::fRecoilFirstPersonDistanceThreshold : hitDistanceFromWeaponRoot <= Settings::fRecoilThirdPersonDistanceThreshold;
 
-						bool bIsBashing = attackerActor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
+						bool bIsBashing = attackerActor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
 
 						bool bDoRecoil = bIsCloseEnough && !bIsBashing;
 
@@ -205,7 +205,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 						}
 
 						if (bDoRecoil) {
-							auto& attackData = attackerActor->currentProcess->high->attackData;
+							auto& attackData = attackerActor->GetActorRuntimeData().currentProcess->high->attackData;
 							if (attackData) {
 								if (!Settings::bRecoilPowerAttack && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {  // skip recoil if the attack is a power attack
 									bDoRecoil = false;
@@ -305,22 +305,26 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		if (!bTargetIsPlayer) {
 			bTargetIsTeammate = Utils::IsPlayerTeammateOrSummon(targetActor);
 		}
+		
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsPlayer && bTargetIsTeammate) {
-			if (targetActor->currentCombatTarget != attackerActor->GetHandle()) {
+			if (targetActor->GetActorRuntimeData().currentCombatTarget != attackerActor->GetHandle()) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;
 			}
 		}
+
+		auto attackerCombatTarget = attackerActor->GetActorRuntimeData().currentCombatTarget;
+		
 		// don't let the player's teammates or summons hit the player
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
-			if (attackerActor->currentCombatTarget != targetActor->GetHandle()) {
+			if (attackerCombatTarget != targetActor->GetHandle()) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;
 			}
 		}
 		// don't let the player's teammates hit each other
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsTeammate) {
-			if (attackerActor->currentCombatTarget != targetActor->GetHandle()) {
+			if (attackerCombatTarget != targetActor->GetHandle()) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;
 			}
@@ -379,7 +383,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		bool bIsPowerAttack = false;
 		bool bIsTwoHanded = false;
 
-		auto& attackData = attackerActor->currentProcess->high->attackData;
+		auto& attackData = attackerActor->GetActorRuntimeData().currentProcess->high->attackData;
 		if (attackData && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {
 			bIsPowerAttack = true;
 		}

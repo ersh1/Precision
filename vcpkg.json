@@ -2,7 +2,8 @@
   "name": "precision",
   "version": "1",
   "dependencies": [
-    "fast-cpp-csv-parser",
+    "fmt",
+    "rapidcsv",
     "rsm-binary-io",
     "simpleini",
     "spdlog",

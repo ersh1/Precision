@@ -9,105 +9,106 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 {
 	lastUpdate = *g_durationOfApplicationRunTimeMS;
 
-	auto actor = a_actorHandle.get();
-	if (actor && actor->currentProcess) {
-		auto cell = actor->GetParentCell();
-		if (cell) {
-			if (RE::NiPointer<RE::NiNode> newNode = RE::NiPointer<RE::NiNode>(AddCollision(actorHandle, a_collisionDefinition))) {
-				bool bIsWeapon = a_collisionDefinition.nodeName == "WEAPON"sv || a_collisionDefinition.nodeName == "SHIELD"sv;
-				if (bIsWeapon) {
-					RE::InventoryEntryData* weaponItem = nullptr;
-					RE::TESForm* equipment = nullptr;
-					RE::TESObjectWEAP* equippedWeapon = nullptr;
+	if (auto actor = a_actorHandle.get()) {
+		if (auto currentProcess = actor->GetActorRuntimeData().currentProcess) {
+			auto cell = actor->GetParentCell();
+			if (cell) {
+				if (RE::NiPointer<RE::NiNode> newNode = RE::NiPointer<RE::NiNode>(AddCollision(actorHandle, a_collisionDefinition))) {
+					bool bIsWeapon = a_collisionDefinition.nodeName == "WEAPON"sv || a_collisionDefinition.nodeName == "SHIELD"sv;
+					if (bIsWeapon) {
+						RE::InventoryEntryData* weaponItem = nullptr;
+						RE::TESForm* equipment = nullptr;
+						RE::TESObjectWEAP* equippedWeapon = nullptr;
 
-					bool bIsBashing = false;
+						bool bIsBashing = false;
 
-					bool bIsLeftHand = a_collisionDefinition.nodeName != "WEAPON"sv;
+						bool bIsLeftHand = a_collisionDefinition.nodeName != "WEAPON"sv;
 
-					if (bIsLeftHand) {
-						weaponItem = actor->currentProcess->middleHigh->leftHand;
-					} else {
-						weaponItem = actor->currentProcess->middleHigh->rightHand;
-					}
-
-					if (weaponItem) {
-						equipment = weaponItem->object;
-					}
-
-					if (!equipment) {
-						bIsWeapon = false;
-					}
-
-					bIsBashing = actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
-
-					bool bShowTrail = Settings::bDisplayTrails && !a_collisionDefinition.bNoTrail && !bIsBashing;
-
-					if (bShowTrail) {
-						if (equipment) {
-							equippedWeapon = equipment->As<RE::TESObjectWEAP>();
+						if (bIsLeftHand) {
+							weaponItem = currentProcess->middleHigh->leftHand;
+						} else {
+							weaponItem = currentProcess->middleHigh->rightHand;
 						}
 
-						if (!equippedWeapon || (equippedWeapon && equippedWeapon->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee)) {
-							bShowTrail = false;
+						if (weaponItem) {
+							equipment = weaponItem->object;
 						}
-					}					
 
-					// get visual weapon length
-					if (newNode->parent && newNode->parent->children.size() > 0) {
-						auto& weaponNode = newNode->parent->children[0];
-						if (weaponNode && weaponNode != newNode) {
-							visualWeaponLength = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
+						if (!equipment) {
+							bIsWeapon = false;
+						}
+
+						bIsBashing = actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
+
+						bool bShowTrail = Settings::bDisplayTrails && !a_collisionDefinition.bNoTrail && !bIsBashing;
+
+						if (bShowTrail) {
+							if (equipment) {
+								equippedWeapon = equipment->As<RE::TESObjectWEAP>();
+							}
+
+							if (!equippedWeapon || (equippedWeapon && equippedWeapon->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee)) {
+								bShowTrail = false;
+							}
+						}
+
+						// get visual weapon length
+						if (newNode->parent && newNode->parent->children.size() > 0) {
+							auto& weaponNode = newNode->parent->children[0];
+							if (weaponNode && weaponNode != newNode) {
+								visualWeaponLength = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
+							}
+						}
+
+						// add trail
+						if (bShowTrail) {
+							PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand, a_collisionDefinition.bTrailUseTrueLength, a_collisionDefinition.trailOverride));
 						}
 					}
 
-					// add trail
-					if (bShowTrail) {
-						PrecisionHandler::GetSingleton()->_attackTrails.emplace_back(std::make_shared<AttackTrail>(newNode.get(), actorHandle, cell, weaponItem, bIsLeftHand, a_collisionDefinition.bTrailUseTrueLength, a_collisionDefinition.trailOverride));
-					}
+					Utils::Capsule capsule;
+					Utils::GetCapsuleParams(newNode.get(), capsule);
+					capsuleLength = fmax(capsule.a.GetDistance(capsule.b), capsule.radius * 2.f);
+
+					collisionNode = newNode;
 				}
 
-				Utils::Capsule capsule;
-				Utils::GetCapsuleParams(newNode.get(), capsule);
-				capsuleLength = fmax(capsule.a.GetDistance(capsule.b), capsule.radius * 2.f);
+				ID = a_collisionDefinition.ID;
+				bNoRecoil = a_collisionDefinition.bNoRecoil;
+				damageMult = a_collisionDefinition.damageMult;
+				groundShake = a_collisionDefinition.groundShake;
 
-				collisionNode = newNode;
+				lifetime = a_collisionDefinition.duration;
+				if (a_collisionDefinition.duration) {
+					if (lifetime == 0) {
+						lifetime = Settings::fDefaultCollisionLifetime;
+						bool bPowerAttack = false;
+						if (auto& attackData = Actor_GetAttackData(actor.get())) {
+							bPowerAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
+						}
+						if (bPowerAttack) {
+							*lifetime *= Settings::fDefaultCollisionLifetimePowerAttackMult;
+						}
+					}
+
+					float weaponSpeedMult = 1.f;
+					actor->GetGraphVariableFloat("weaponSpeedMult"sv, weaponSpeedMult);
+					if (weaponSpeedMult == 0.f) {
+						weaponSpeedMult = 1.f;
+					}
+					*lifetime *= (1.f / weaponSpeedMult);
+
+					// really hacky fix for a weird issue
+					if (*g_deltaTime > 0.011f) {
+						*lifetime += *g_deltaTime;
+					}
+
+					if (a_collisionDefinition.durationMult) {
+						*lifetime *= *a_collisionDefinition.durationMult;
+					}
+				}
 			}
-
-			ID = a_collisionDefinition.ID;
-			bNoRecoil = a_collisionDefinition.bNoRecoil;
-			damageMult = a_collisionDefinition.damageMult;
-			groundShake = a_collisionDefinition.groundShake;
-
-			lifetime = a_collisionDefinition.duration;
-			if (a_collisionDefinition.duration) {
-				if (lifetime == 0) {
-					lifetime = Settings::fDefaultCollisionLifetime;
-					bool bPowerAttack = false;
-					if (auto& attackData = Actor_GetAttackData(actor.get())) {
-						bPowerAttack = attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack);
-					}
-					if (bPowerAttack) {
-						*lifetime *= Settings::fDefaultCollisionLifetimePowerAttackMult;
-					}
-				}
-
-				float weaponSpeedMult = 1.f;
-				actor->GetGraphVariableFloat("weaponSpeedMult"sv, weaponSpeedMult);
-				if (weaponSpeedMult == 0.f) {
-					weaponSpeedMult = 1.f;
-				}
-				*lifetime *= (1.f / weaponSpeedMult);
-
-				// really hacky fix for a weird issue
-				if (*g_deltaTime > 0.011f) {
-					*lifetime += *g_deltaTime;
-				}
-
-				if (a_collisionDefinition.durationMult) {
-					*lifetime *= *a_collisionDefinition.durationMult;
-				}
-			}
-		}
+		}		
 	}
 }
 
@@ -164,16 +165,18 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 	bool bIsBowBashing = false;
 	
 	if (bIsWeapon) {
-		bool bIsBashing = actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
+		bool bIsBashing = actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
 		if (!bIsBashing) {
 			if (auto& attackData = Actor_GetAttackData(actor)) {
 				bIsBashing = attackData->event == "bashStart"sv;
 			}
 		}
 
+		auto currentProcess = actor->GetActorRuntimeData().currentProcess;
+
 		if (bIsBashing) {
-			auto rightHandEquipment = actor->currentProcess->GetEquippedRightHand();
-			auto leftHandEquipment = actor->currentProcess->GetEquippedLeftHand();
+			auto rightHandEquipment = currentProcess->GetEquippedRightHand();
+			auto leftHandEquipment = currentProcess->GetEquippedLeftHand();
 
 			bool bIsBashingWithLeftHand = leftHandEquipment && leftHandEquipment != rightHandEquipment;  // has something else in the left hand so use the left hand node
 			if (!bIsBashingWithLeftHand && rightHandEquipment) {  // check if it's a bow, bows are held in the left hand even if they're technically right hand
@@ -291,7 +294,6 @@ RE::NiNode* AttackCollision::AddCollision(RE::ActorHandle a_actorHandle, const C
 
 	uint32_t collisionFilterInfo = 0;
 
-#pragma warning(suppress: 4834)
 	actor->GetCollisionFilterInfo(collisionFilterInfo);
 
 	if (auto rb = Utils::GetRigidBody(actor->Get3D())) {

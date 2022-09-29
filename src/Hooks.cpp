@@ -48,10 +48,12 @@ namespace Hooks
 		}
 
 		// set pitch for upper body modifier, don't use vanilla pitch because it's weird
-		if (a_this->actorState1.meleeAttackState > RE::ATTACK_STATE_ENUM::kDraw && a_this->actorState1.meleeAttackState < RE::ATTACK_STATE_ENUM::kBowDraw) {
+		auto actorState = a_this->AsActorState();
+		if (actorState->actorState1.meleeAttackState > RE::ATTACK_STATE_ENUM::kDraw && actorState->actorState1.meleeAttackState < RE::ATTACK_STATE_ENUM::kBowDraw) {
 			float dummy;
-			if (a_this->currentCombatTarget && a_this->GetGraphVariableFloat("Collision_PitchMult"sv, dummy)) {  // only do this if the actor has a target and the graph contains the variable
-				if (auto combatTarget = a_this->currentCombatTarget.get()) {
+			auto& currentCombatTarget = a_this->GetActorRuntimeData().currentCombatTarget;
+			if (currentCombatTarget && a_this->GetGraphVariableFloat("Collision_PitchMult"sv, dummy)) {  // only do this if the actor has a target and the graph contains the variable
+				if (auto combatTarget = currentCombatTarget.get()) {
 					RE::NiPoint3 actorPos;
 					if (!Utils::GetTorsoPos(a_this, actorPos)) {
 						actorPos = a_this->GetLookingAtLocation();
@@ -242,9 +244,10 @@ namespace Hooks
 		}
 
 		uint32_t cullState = 7;  // do not cull this actor
-
-		a_actor->unk274 &= 0xFFFFFFF0;
-		a_actor->unk274 |= cullState & 0xF;
+		
+		auto& unk274 = a_actor->GetActorRuntimeData().unk274;
+		unk274 &= 0xFFFFFFF0;
+		unk274 |= cullState & 0xF;
 	}
 
 	void HavokHooks::PostCreate(RE::RaceSexMenu* a_this)
@@ -438,7 +441,7 @@ namespace Hooks
 
 						if (Settings::bForceAnimationUpdateForActiveActors) {
 							// Force the game to run the animation graph update (and hence driveToPose, etc.)
-							actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kForceAnimGraphUpdate);
+							actor->GetActorRuntimeData().boolFlags.set(RE::Actor::BOOL_FLAGS::kForceAnimGraphUpdate);
 						}
 					}
 				} else if (bShouldRemoveFromWorld) {
@@ -464,7 +467,7 @@ namespace Hooks
 				}
 
 				// bonus fix for character controller position desync with 'tai'
-				if (charController && !actor->boolBits.any(RE::Actor::BOOL_BITS::kProcessMe) && bIsHittableCharController) {
+				if (charController && !actor->GetActorRuntimeData().boolBits.any(RE::Actor::BOOL_BITS::kProcessMe) && bIsHittableCharController) {
 					auto actorRoot = actor->Get3D();
 					auto rootPos = actorRoot->world.translate;
 					auto rootPosHavok = rootPos * *g_worldScale;
@@ -726,7 +729,7 @@ namespace Hooks
 		}
 
 		{
-			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 
 			if (animGraphManager->graphs.size() <= 0) {
 				return false;
@@ -774,12 +777,12 @@ namespace Hooks
 			return false;
 		}
 		
-		if (!actor->boolBits.any(RE::Actor::BOOL_BITS::kProcessMe)) {
+		if (!actor->GetActorRuntimeData().boolBits.any(RE::Actor::BOOL_BITS::kProcessMe)) {
 			return false;
 		}
 
 		{
-			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 
 			if (animGraphManager->graphs.size() <= 0) {
 				return false;
@@ -818,7 +821,7 @@ namespace Hooks
 
 		if (bHasRagdollInterface) {
 			{
-				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					auto& driver = graph->characterInstance.ragdollDriver;
 					if (driver) {
@@ -851,7 +854,7 @@ namespace Hooks
 			}
 
 			{
-				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					if (graph->AddRagdollToWorld()) {
 						break;
@@ -862,7 +865,7 @@ namespace Hooks
 			ModifyConstraints(actor);
 
 			{
-				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					graph->SetRagdollConstraintsFromBhkConstraints();
 				}
@@ -892,7 +895,7 @@ namespace Hooks
 
 		if (bHasRagdollInterface) {
 			{
-				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					if (graph->RemoveRagdollFromWorld()) {
 						break;
@@ -901,7 +904,7 @@ namespace Hooks
 			}
 
 			{
-				RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+				RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 				for (auto& graph : animGraphManager->graphs) {
 					auto& driver = graph->characterInstance.ragdollDriver;
 					if (driver) {
@@ -999,7 +1002,7 @@ namespace Hooks
 		}
 
 		if (bHasRagdollInterface) {
-			RE::BSSpinLockGuard animGraphLocker(animGraphManager->updateLock);
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 			for (auto& graph : animGraphManager->graphs) {
 				graph->ToggleSyncOnUpdate(true);
 			}
@@ -1088,7 +1091,7 @@ namespace Hooks
 			ragdoll->impulseTime -= a_deltaTime;
 		}
 
-		auto knockState = actor->GetKnockState();
+		auto knockState = actor->AsActorState()->GetKnockState();
 		if (Settings::bBlendWhenGettingUp) {
 			if (ragdoll->knockState == KnockState::kQueued && knockState == KnockState::kGetUp) {
 				// Went from starting to get up to actually getting up

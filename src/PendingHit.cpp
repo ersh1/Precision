@@ -105,10 +105,12 @@ void PendingHit::DoHit()
 		RE::HitData hitData;
 		HitData_ctor(&hitData);
 
+		auto attackerProcess = attacker->GetActorRuntimeData().currentProcess;
+
 		if (precisionHandler->postHitCallbacks.size() > 0) {
 			//auto currentWeapon = attacker->GetAttackingWeapon();
-			if (attacker->currentProcess) {
-				auto currentWeapon = AIProcess_GetCurrentlyEquippedWeapon(attacker->currentProcess, bIsLeftHand);
+			if (attackerProcess) {
+				auto currentWeapon = AIProcess_GetCurrentlyEquippedWeapon(attackerProcess, bIsLeftHand);
 				HitData_Populate(&hitData, attacker.get(), targetActor, currentWeapon, bIsLeftHand);
 				hitData.hitPosition = niHitPos;
 				hitData.hitDirection = niHitVelocity;
@@ -159,12 +161,12 @@ void PendingHit::DoHit()
 			}
 		}
 
-		bool bJustKilled = !bIsDead && targetActor->GetActorValue(RE::ActorValue::kHealth) <= 0.f;
+		bool bJustKilled = !bIsDead && targetActor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) <= 0.f;
 
-		if (Settings::bApplyImpulseOnHit && attacker && attacker->currentProcess && attacker->currentProcess->high) {
+		if (Settings::bApplyImpulseOnHit && attacker && attackerProcess && attackerProcess->high) {
 			if (!bJustKilled || Settings::bApplyImpulseOnKill) {
 				float impulseMult = Settings::fHitImpulseBaseMult;
-				auto& attackData = attacker->currentProcess->high->attackData;
+				auto& attackData = attackerProcess->high->attackData;
 				if (attackData && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {
 					impulseMult *= Settings::fHitImpulsePowerAttackMult;
 				}
