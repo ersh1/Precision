@@ -12,7 +12,8 @@ namespace PRECISION_API
 	{
 		V1,
 		V2,
-		V3
+		V3,
+		V4
 	};
 
 	// Error types that may be returned by Precision
@@ -62,6 +63,29 @@ namespace PRECISION_API
 		bool bIgnoreHit = true;
 	};
 
+	enum class PrecisionLayerType : uint8_t
+	{
+		None,
+		Attack,  // The layer used for attack collisions
+		Body     // The layer used by the cloned body collisions
+	};
+
+	struct PrecisionLayerSetupCallbackReturn
+	{
+		PrecisionLayerSetupCallbackReturn() :
+			precisionLayerType(PrecisionLayerType::None), layersToAdd(0), layersToRemove(0)
+		{}
+		
+		// which layer to alter
+		PrecisionLayerType precisionLayerType;
+
+		// the layer bits to add
+		uint64_t layersToAdd;
+
+		// the layer bits to remove
+		uint64_t layersToRemove;
+	};
+
 	struct PrecisionHitData
 	{
 		PrecisionHitData(RE::Actor* a_attacker, RE::TESObjectREFR* a_target, RE::hkpRigidBody* a_hitRigidBody, RE::hkpRigidBody* a_hittingRigidBody, const RE::NiPoint3& a_hitPos,
@@ -106,6 +130,7 @@ namespace PRECISION_API
 	using WeaponCollisionCallback = std::function<WeaponCollisionCallbackReturn(const PrecisionHitData&)>;
 	using CollisionFilterSetupCallback = std::function<void(RE::bhkCollisionFilter*)>;
 	using ContactListenerCallback = std::function<void(const RE::hkpContactPointEvent&)>;
+	using PrecisionLayerSetupCallback = std::function<PrecisionLayerSetupCallbackReturn()>;
 
 	// Precision's modder interface
 	class IVPrecision1
@@ -213,14 +238,7 @@ namespace PRECISION_API
 		/// <returns>OK, NotRegistered</returns>
 		virtual APIResult RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
 		
-		/// <summary>
-		/// Applies impulse.
-		/// </summary>
-		/// <param name="a_actorHandle">Actor handle</param>
-		/// <param name="a_rigidBody">Hit rigid body</param>
-		/// <param name="a_hitVelocity">Hit velocity vector</param>
-		/// <param name="a_hitPosition">Hit position</param>
-		/// <param name="a_impulseMult">Impulse strength multiplier</param>
+		[[deprecated("Use ApplyHitImpulse2 instead")]]
 		virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
 	};
 
@@ -301,6 +319,52 @@ namespace PRECISION_API
 		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept = 0;
 	};
 
+	class IVPrecision4 : public IVPrecision3
+	{
+	public:
+		/// <summary>
+		/// Adds a callback that can add/remove layers that should collide with Precision Layers.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <param name="a_callback">The callback function</param>
+		/// <returns>OK, AlreadyRegistered</returns>
+		virtual APIResult AddPrecisionLayerSetupCallback(SKSE::PluginHandle a_myPluginHandle, PrecisionLayerSetupCallback&& a_callback) noexcept = 0;
+
+		/// <summary>
+		/// Removes the callback that can add/remove layers that should collide with Precision Layers.
+		/// </summary>
+		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
+		/// <returns>OK, NotRegistered</returns>
+		virtual APIResult RemovePrecisionLayerSetupCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
+
+		/// <summary>
+		/// Returns the original node in case the given node is a clone.
+		/// </summary>
+		/// <param name="a_actorHandle">Actor handle</param>
+		/// <param name="a_node">Node that's potentially a clone</param>
+		/// <returns>The original node, or nullptr if the given one wasn't a clone</returns>
+		virtual RE::NiAVObject* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) noexcept = 0;
+
+		/// <summary>
+		/// Returns the original rigid body in case the given rigid body is a clone.
+		/// </summary>
+		/// <param name="a_actorHandle">Actor handle</param>
+		/// <param name="a_hkpRigidBody">Rigid body that's potentially a clone</param>
+		/// <returns>The original rigid body, or nullptr if the given one wasn't a clone</returns>
+		virtual RE::hkpRigidBody* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_hkpRigidBody) noexcept = 0;
+
+		/// <summary>
+		/// Applies impulse.
+		/// </summary>
+		/// <param name="a_targetActorHandle">Target actor handle</param>
+		/// <param name="a_sourceActorHandle">Source actor handle</param>
+		/// <param name="a_rigidBody">Hit rigid body</param>
+		/// <param name="a_hitVelocity">Hit velocity vector</param>
+		/// <param name="a_hitPosition">Hit position</param>
+		/// <param name="a_impulseMult">Impulse strength multiplier</param>
+		virtual void ApplyHitImpulse2(RE::ActorHandle a_targetActorHandle, RE::ActorHandle a_sourceActorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
+	};
+
 	typedef void* (*_RequestPluginAPI)(const InterfaceVersion interfaceVersion);
 
 	/// <summary>
@@ -309,10 +373,10 @@ namespace PRECISION_API
 	/// </summary>
 	/// <param name="a_interfaceVersion">The interface version to request</param>
 	/// <returns>The pointer to the API singleton, or nullptr if request failed</returns>
-	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V3)
+	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V4)
 	{
-		auto pluginHandle = GetModuleHandleA("Precision.dll");
-		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)GetProcAddress(pluginHandle, "RequestPluginAPI");
+		auto pluginHandle = GetModuleHandle("Precision.dll");
+		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)SKSE::WinAPI::GetProcAddress(pluginHandle, "RequestPluginAPI");
 		if (requestAPIFunction) {
 			return requestAPIFunction(a_interfaceVersion);
 		}

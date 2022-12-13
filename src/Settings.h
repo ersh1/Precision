@@ -136,10 +136,11 @@ struct Settings
 	static inline bool bDisablePhysicalCollisionOnHit = true;
 	static inline float fWeaponLengthMult = 1.2f;
 	static inline float fWeaponCapsuleRadius = 12.f;
-	static inline float fMinWeaponLength = 50.f;
+	static inline float fMinWeaponLength = 40.f;
 	static inline float fDefaultCollisionLifetime = 0.3f;
 	static inline float fDefaultCollisionLifetimePowerAttackMult = 1.8f;
 	static inline float fHitSameRefCooldown = 0.30f;
+	static inline float fHitSameMaterialCooldown = 0.30f;
 	static inline float fFirstPersonAttackLengthOffset = 0.f;
 	static inline float fPlayerAttackLengthMult = 1.f;
 	static inline float fPlayerAttackRadiusMult = 1.5f;
@@ -153,6 +154,7 @@ struct Settings
 
 	// Trails
 	static inline bool bDisplayTrails = true;
+	static inline bool bTrailUseAttackCollisionLength = false;
 	static inline float fTrailSegmentLifetime = 0.1f;
 	static inline float fTrailFadeOutTime = 0.1f;
 	static inline uint32_t uTrailSegmentsPerSecond = 120;
@@ -187,8 +189,8 @@ struct Settings
 	static inline bool bRecoilNPC = true;
 	static inline bool bRecoilPowerAttack = true;
 	static inline bool bUseVanillaRecoil = false;
-	static inline float fRecoilFirstPersonDistanceThreshold = 80.f;
-	static inline float fRecoilThirdPersonDistanceThreshold = 20.f;
+	static inline bool bRemoveRecoilOnHitframe = true;
+	static inline float fRecoilCollisionLength = 25.f;
 
 	static inline bool bEnableRecoilCameraShake = true;
 	static inline float fRecoilCameraShakeStrength = 10.f;
@@ -215,10 +217,10 @@ struct Settings
 	static inline float fHitImpulseDecayMult2 = 0.125f;
 	static inline float fHitImpulseDecayMult3 = 0.075f;
 
-	// Active Ragdoll
-	static inline float fActiveRagdollStartDistance = 3500.f;
-	static inline float fActiveRagdollEndDistance = 4500.f;
-
+	// Miscellaneous
+	static inline float fActiveActorDistance = 4000.f;
+	static inline bool bHookAIWeaponReach = true;
+	static inline bool bDisableCharacterBumper = true;
 	static inline bool bUseRagdollCollisionWhenAllowed = true;
 
 	// Debug
@@ -238,19 +240,26 @@ struct Settings
 	static inline float fRagdollBoneMaxLinearVelocity = 500.f;
 	static inline float fRagdollBoneMaxAngularVelocity = 500.f;
 	static inline float fWorldChangedWaitTime = 0.4f;
-	static inline float fBlendInTime = 0.f;
-	static inline float fBlendOutTime = 0.1f;
+	static inline float fBlendInTime = 0.05f;
+	static inline float fBlendOutTime = 0.05f;
 	static inline float fGetUpBlendTime = 0.2f;
+	static inline bool bFadeInComputedWorldFromModel = true;
+	static inline bool bFadeOutComputedWorldFromModel = true;	
+	static inline float fComputeWorldFromModelFadeInTime = 0.5f;
+	static inline float fComputeWorldFromModelFadeOutTime = 0.3f;
 	static inline bool bConvertHingeConstraintsToRagdollConstraints = true;
 	static inline bool bLoosenRagdollContraintsToMatchPose = true;
-	static inline bool bDoBlending = false;
+	static inline bool bLoosenRagdollContraintPivots = true;
+	static inline bool bDoBlending = true;
 	static inline bool bBlendWhenGettingUp = false;
 	static inline bool bForceAnimPose = false;
 	static inline bool bForceRagdollPose = false;
 	static inline float fPoweredControllerOnFraction = 0.05f;
-	static inline bool bEnableKeyframes = true;
+	static inline bool bEnableKeyframes = false;
 	static inline float fBlendInKeyframeTime = 0.05f;
-	static inline float fRagdollImpulseTime = 0.5f;
+	static inline float fAddRagdollSettleTime = 0.05f;
+	static inline bool bKnockDownAfterBuggedGetUp = true;
+	static inline float fRagdollImpulseTime = 0.75f;
 	static inline float fHierarchyGain = 0.6f;
 	static inline float fVelocityGain = 0.6f;
 	static inline float fPositionGain = 0.05f;
@@ -261,17 +270,27 @@ struct Settings
 	static inline float fPoweredConstantRecoveryVelocity = 0.2f;
 	static inline bool bCopyFootIkToPoseTrack = true;
 	static inline bool bDoWarp = false;
+	static inline bool bDisableWarpWhenGettingUp = true;
 	static inline float fMaxAllowedDistBeforeWarp = 3.f;
 	static inline float fHitImpulseFeetDistanceThreshold = 20.f;
-	static inline bool bEnableWaterSplashes = false;
+	static inline bool bEnableWaterSplashes = true;
 	static inline uint32_t iWaterSplashCooldownMs = 50;
+	static inline float fReceivedHitstopCooldown = 0.7f;
+	static inline float fDriveToPoseHitstopMultiplier = 0.3f;
 
 	// Non-MCM
 	static inline bool bDisableMod = false;
 
-	static inline uint32_t iPrecisionLayerIndex = 56;
-	//static inline uint64_t iPrecisionLayerBitfield = 0x53343561B7FFF;  // same as L_WEAPON layer
-	static inline uint64_t iPrecisionLayerBitfield = 0x1053343561B7FFF;  // same as L_WEAPON layer, but + self-collision (layer 56)
+	static inline uint32_t iPrecisionAttackLayerIndex = 56;
+	static inline uint32_t iPrecisionBodyLayerIndex = 57;
+	static inline uint32_t iPrecisionRecoilLayerIndex = 58;
+	static inline RE::BSFixedString sPrecisionAttackLayerName = "L_PRECISION_ATTACK";
+	static inline RE::BSFixedString sPrecisionBodyLayerName = "L_PRECISION_BODY";
+	static inline RE::BSFixedString sPrecisionRecoilLayerName = "L_PRECISION_RECOIL";
+	static inline uint64_t iPrecisionAttackLayerBitfield = 0x7053341561B7EFF;  // same as L_WEAPON layer, but -biped_no_cc (layer 33) +self-collision (layer 56) +precision body (layer 57) +precision body_no_cc (layer 58)
+	static inline uint64_t iPrecisionBodyLayerBitfield = 0x100000040000000;      // only collide with precision attack (layer 56) and charcontroller (layer 30)
+	static inline uint64_t iPrecisionRecoilLayerBitfield = 0x141A661F;         // only relevant layers
+	
 	static inline uint64_t iBipedLayerBitfield = 0x407BC01C037A8F;  // same as L_BIPED layer
 
 	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitions;
@@ -285,6 +304,7 @@ struct Settings
 	static inline std::vector<TrailDefinition> trailDefinitionsAny;
 	static inline std::vector<TrailDefinition> trailDefinitionsAll;
 	static inline std::vector<std::pair<std::string, std::string>> attackEventPairs;
+	static inline std::unordered_map<RE::TESObjectWEAP*, float> weaponLengthOverrides;
 	
 	static inline std::unordered_set<RE::BGSMaterialType*> recoilMaterials;
 	static inline RE::BGSBodyPartData* defaultBodyPartData;
@@ -293,6 +313,14 @@ struct Settings
 	static inline RE::BSFixedString firstPersonRecoilEvent = "recoilStart";
 	static inline RE::BSFixedString vanillaRecoilEvent = "recoilLargeStart";
 	static inline RE::BSFixedString jumpIframeNode = "NPC Spine2 [Spn2]";
+
+	static inline std::string bloodTrailMeshPath = "Effects/WeaponTrails/BloodHitHuman.nif";
+
+	static inline float fActiveDistanceHysteresis = 0.1f;
+	static inline float fWeaponLengthAICachedRadiusMult = 1.f;
+	static inline float fWeaponLengthUnarmedOffset = -10.f;
+
+	static inline float fMinWeaponRadius = 1.f;
 
 	static inline float defaultMeshLengthOneHandSword = 70.f;
 	static inline float defaultMeshLengthOneHandDagger = 32.4f;
@@ -305,6 +333,7 @@ struct Settings
 	static inline RE::NiPoint3 cameraShakeAxis = { 1.f, 0.f, 0.f };
 
 	static inline RE::TESGlobal* glob_nemesis = nullptr;
+	static inline RE::TESGlobal* glob_IFPVFirstPerson = nullptr;
 };
 
 

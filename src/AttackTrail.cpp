@@ -51,27 +51,36 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 
 		trailParticle = RE::NiPointer<RE::BSTempEffectParticle>(RE::BSTempEffectParticle::Spawn(a_cell, 10.f, trailMeshPath.data(), collisionParentNode->world.rotate, collisionParentNode->world.translate, 1.f, 7, nullptr));
 
+		float length = 0.f;
 		if (!a_bTrailUseTrueLength)
 		{
 			weaponNode = RE::NiPointer<RE::NiNode>(static_cast<RE::NiNode*>(a_node->parent->children[0].get()));
 			if (weaponNode && weaponNode != collisionNode) {
 				if (a_weaponItem && a_weaponItem->object) {
 					if (auto equippedWeapon = a_weaponItem->object->As<RE::TESObjectWEAP>()) {
-						float length = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
+						auto actor = a_actorHandle.get();
+						if (!PrecisionHandler::TryGetCachedWeaponMeshReach(actor.get(), equippedWeapon, length)) {
+							length = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
+						}
 
 						scale = length * 0.01f;
-
-						return;
 					}
 				}
 			}
 		}
 
-		Utils::Capsule capsule;
-		Utils::GetCapsuleParams(a_node, capsule);
+		if (length == 0.f) {
+			Utils::Capsule capsule;
+			Utils::GetCapsuleParams(a_node, capsule);
 
-		float capsuleLength = capsule.a.GetDistance(capsule.b);
-		scale = fmax(capsuleLength, capsule.radius) * 0.01f;
+			length = capsule.a.GetDistance(capsule.b);
+			scale = fmax(length, capsule.radius) * 0.01f;
+		}
+
+		/*RE::NiMatrix3 bloodTrailRotation = collisionParentNode->world.rotate * weaponRotation;
+		RE::NiPoint3 bloodTipOffset = { 0.f, length, 0.f };
+		RE::NiPoint3 bloodTrailLocation = collisionParentNode->world.translate + (collisionParentNode->world.rotate * bloodTipOffset);
+		bloodTrailParticle = RE::NiPointer<RE::BSTempEffectParticle>(RE::BSTempEffectParticle::Spawn(a_cell, 10.f, Settings::bloodTrailMeshPath.data(), bloodTrailRotation, bloodTrailLocation, 1.f, 7, collisionParentNode.get()));*/
 	}
 }
 
@@ -103,6 +112,13 @@ void AttackTrail::Update(float a_deltaTime)
 		trailHistory.emplace_back(transform);
 		
 		if (trailParticle && trailParticle->particleObject) {
+
+			if (auto actor = actorHandle.get()) {
+				if (actor->IsPlayerRef()) {
+					a_deltaTime *= Utils::GetPlayerTimeMultiplier();
+				}
+			}
+			
 			if (!bAppliedTrailColorSettings || bExpired) {
 				if (bExpired) {
 					if (Settings::fTrailFadeOutTime > 0.f) {
@@ -255,6 +271,12 @@ void AttackTrail::Update(float a_deltaTime)
 				}
 			}
 		}
+
+		/*if (bloodTrailParticle && bloodTrailParticle->particleObject) {
+			if (auto fadeNode = bloodTrailParticle->particleObject->AsFadeNode()) {
+				fadeNode->currentFade = 1.f;
+			}
+		}*/
 		
 		currentTime += a_deltaTime;
 	}
@@ -272,7 +294,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 		if (a_trailDefinition.weaponNames) {
 			if (auto fullNameForm = a_item->object->As<RE::TESFullName>()) {
 				for (auto& name : *a_trailDefinition.weaponNames) {
-					if (!SKSE::stl::string::icontains(fullNameForm->fullName, name)) {
+					if (!fullNameForm->fullName.contains(name)) {
 						return false;
 					}
 				}
@@ -319,7 +341,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			if (a_trailDefinition.enchantmentNames) {
 				if (auto fullNameForm = magicItem->As<RE::TESFullName>()) {
 					for (auto& name : *a_trailDefinition.enchantmentNames) {
-						if (!SKSE::stl::string::icontains(fullNameForm->fullName, name)) {
+						if (!fullNameForm->fullName.contains(name)) {
 							return false;
 						}
 					}
@@ -337,7 +359,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 							// check effect names
 							if (a_trailDefinition.effectNames) {
 								for (auto& name : *a_trailDefinition.effectNames) {
-									if (!SKSE::stl::string::icontains(effect->baseEffect->fullName, name)) {
+									if (!effect->baseEffect->fullName.contains(name)) {
 										return false;
 									}
 								}
@@ -392,7 +414,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 		if (a_trailDefinition.weaponNames) {
 			if (auto fullNameForm = a_item->object->As<RE::TESFullName>()) {
 				for (auto& name : *a_trailDefinition.weaponNames) {
-					if (SKSE::stl::string::icontains(fullNameForm->fullName, name)) {
+					if (fullNameForm->fullName.contains(name)) {
 						return true;
 					}
 				}
@@ -411,7 +433,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 		}
 
 		// check enchantment
-		if (a_trailDefinition.enchantmentNames || a_trailDefinition.effectKeywords || a_trailDefinition.effectShaders) {
+		if (a_trailDefinition.enchantmentNames || a_trailDefinition.effectNames || a_trailDefinition.effectKeywords || a_trailDefinition.effectShaders) {
 			if (!a_actorHandle) {
 				return false;
 			}
@@ -437,7 +459,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			if (a_trailDefinition.enchantmentNames) {
 				if (auto fullNameForm = magicItem->As<RE::TESFullName>()) {
 					for (auto& name : *a_trailDefinition.enchantmentNames) {
-						if (SKSE::stl::string::icontains(fullNameForm->fullName, name)) {
+						if (fullNameForm->fullName.contains(name)) {
 							return true;
 						}
 					}
@@ -460,7 +482,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 							// check effect names
 							if (a_trailDefinition.effectNames) {
 								for (auto& name : *a_trailDefinition.effectNames) {
-									if (SKSE::stl::string::icontains(a_effect->baseEffect->fullName, name)) {
+									if (a_effect->baseEffect->fullName.contains(name)) {
 										return true;
 									}
 								}

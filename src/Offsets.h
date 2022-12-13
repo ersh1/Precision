@@ -13,6 +13,14 @@ static float* g_worldScale = (float*)RELOCATION_ID(231896, 188105).address();
 static float* g_worldScaleInverse = (float*)RELOCATION_ID(230692, 187407).address();
 static DWORD* g_dwTlsIndex = (DWORD*)RELOCATION_ID(520865, 407383).address();  // 2F50B74, 2FEB6F4
 
+static bool* g_bAddBipedWhenKeyframed = (bool*)RELOCATION_ID(500874, 358839).address();  // 1DB1818, 1E45818
+static bool* g_bAddBipedWhenKeyframedIndirect = (bool*)RELOCATION_ID(512240, 389098).address();  // 1E08301, 1E9D189
+
+static void* g_unkCloneValue1 = (void*)RELOCATION_ID(501133, 359452).address();          // 1DB348C, 1E47508
+static void* g_unkCloneValue2 = (void*)RELOCATION_ID(501132, 359451).address();          // 1DB3488, 1E47504
+static uint32_t* g_unkCloneValue3 = (uint32_t*)RELOCATION_ID(523909, 410490).address();  // 3012500, 30AD080
+static char* g_unkCloneValue4 = (char*)RELOCATION_ID(511989, 388581).address(); 
+
 static RE::BSRenderManager* g_renderManager = (RE::BSRenderManager*)RELOCATION_ID(524907, 411393).address();
 
 static RE::BGSAttackData** g_defaultAttackData = (RE::BGSAttackData**)RELOCATION_ID(515609, 401780).address();  // 2F07FC0, 2FA26D0
@@ -21,6 +29,17 @@ static float* g_currentCameraShakeStrength = (float*)RELOCATION_ID(516444, 40262
 static float* g_currentCameraShakeTimer = (float*)RELOCATION_ID(516445, 402623).address();     // 2F251E4, 2FBF5D4
 
 static uintptr_t g_cameraShakeMesh = RELOCATION_ID(516446, 402624).address();  // 2F251E8, 2FBF5D8
+
+static RE::BIPED_OBJECT* g_weaponTypeToBipedObject = (RE::BIPED_OBJECT*)RELOCATION_ID(501493, 360260).address();  // 1DB5168, 1E491D8
+
+static RE::TESObjectWEAP* g_unarmedWeapon = (RE::TESObjectWEAP*)RELOCATION_ID(514923, 401061).address();  // 2EFF868, 2F99F50
+
+static void* g_actorMediator = (void*)RELOCATION_ID(517059, 403567).address();  // 2F271C0, 2FC1C90
+
+static void* g_142EFF990 = (void*)RELOCATION_ID(514960, 401100).address();  // 2EFF990, 2F9A0A0
+
+static void** g_142EC5C60 = (void**)RELOCATION_ID(514725, 400883).address();  // 2EC5C60, 2F603B0
+
 
 inline volatile std::uint32_t* GetBhkSerializableCount()
 {
@@ -127,6 +146,9 @@ static REL::Relocation<thkbBlendPoses> hkbBlendPoses{ RELOCATION_ID(63192, 64112
 typedef RE::hkaRagdollInstance* (*thkbRagdollDriver_getRagdoll)(RE::hkbRagdollDriver* a_this);
 static REL::Relocation<thkbRagdollDriver_getRagdoll> hkbRagdollDriver_getRagdoll{ RELOCATION_ID(57718, 58286) };  // 9EAD10, A0F520
 
+typedef void (*thkbRagdollDriver_reset)(RE::hkbRagdollDriver* a_this);
+static REL::Relocation<thkbRagdollDriver_reset> hkbRagdollDriver_reset{ RELOCATION_ID(57726, 58294) };  // 9ECE70, A11680
+
 typedef RE::NiAVObject* (*tGetNiObjectFromCollidable)(const RE::hkpCollidable* a_collidable);
 static REL::Relocation<tGetNiObjectFromCollidable> GetNiObjectFromCollidable{ RELOCATION_ID(76160, 77988) };  // DAD060, DECF20
 
@@ -153,6 +175,12 @@ static REL::Relocation<tbhkRigidBody_ctor> bhkRigidBody_ctor{ RELOCATION_ID(7631
 
 typedef void (*tbhkRigidBody_ApplyCinfo)(RE::bhkRigidBody* a_this, RE::bhkRigidBodyCinfo* a_cInfo);
 static REL::Relocation<tbhkRigidBody_ApplyCinfo> bhkRigidBody_ApplyCinfo{ RELOCATION_ID(76240, 78070) };  // DB2410, DF23E0
+
+typedef void (*thkVector4_setTransformedPos)(RE::hkVector4& a_this, const RE::hkTransform& a_transform, const RE::hkVector4& a_pos);
+static REL::Relocation<thkVector4_setTransformedPos> hkVector4_setTransformedPos{ RELOCATION_ID(56783, 57213) };  // 9CB230, 9EFA30
+
+typedef void (*thkVector4_setTransformedInversePos)(RE::hkVector4& a_this, const RE::hkTransform& a_transform, const RE::hkVector4& a_pos);
+static REL::Relocation<thkVector4_setTransformedInversePos> hkVector4_setTransformedInversePos{ RELOCATION_ID(56784, 57214) };  // 9CB270, 9EFA70
 
 //typedef void (*tbhkRigidBody_Cinfo_ctor)(RE::bhkRigidBody* a_this, RE::bhkRigidBodyCinfo* a_cInfo);
 //static REL::Relocation<tbhkRigidBody_Cinfo_ctor> bhkRigidBody_Cinfo_ctor{ RELOCATION_ID(19457, 0) };  // 29D510, 0
@@ -202,8 +230,20 @@ static REL::Relocation<thkpEaseConstraintsAction_restoreConstraints> hkpEaseCons
 typedef void (*thkpEntity_updateMovedBodyInfo)(RE::hkpEntity* a_this);
 static REL::Relocation<thkpEntity_updateMovedBodyInfo> hkpEntity_updateMovedBodyInfo{ RELOCATION_ID(60162, 60918) };  // A6F410, A93C20
 
+typedef void (*thkbRagdollDriver_mapHighResPoseLocalToLowResPoseLocal)(RE::hkbRagdollDriver* a_this, const RE::hkQsTransform* a_highResPoseLocal, RE::hkQsTransform* a_lowResPoseLocal);
+static REL::Relocation<thkbRagdollDriver_mapHighResPoseLocalToLowResPoseLocal> hkbRagdollDriver_mapHighResPoseLocalToLowResPoseLocal{ RELOCATION_ID(57734, 58304) };  // 9ED3B0, A11BC0
+
 typedef void (*thkbRagdollDriver_mapHighResPoseLocalToLowResPoseWorld)(RE::hkbRagdollDriver* a_this, const RE::hkQsTransform* a_highResPoseLocal, const RE::hkQsTransform& a_worldFromModel, RE::hkQsTransform* a_lowResPoseWorld);
 static REL::Relocation<thkbRagdollDriver_mapHighResPoseLocalToLowResPoseWorld> hkbRagdollDriver_mapHighResPoseLocalToLowResPoseWorld{ RELOCATION_ID(57735, 58305) };  // 9ED570, A11D80
+
+typedef void (*tCopyAndApplyScaleToPose)(bool a_scaleByHavokWorldScale, uint32_t a_numBones, RE::hkQsTransform* a_poseLowResLocal, RE::hkQsTransform* a_poseOut, float a_worldFromModelScale);
+static REL::Relocation<tCopyAndApplyScaleToPose> CopyAndApplyScaleToPose{ RELOCATION_ID(57730, 58300) };  // 9ED070, A11880
+
+typedef void (*tCopyAndPotentiallyApplyHavokScaleToTransform)(bool a_bScaleByHavokWorldScale, const RE::hkQsTransform* a_in, RE::hkQsTransform* a_out);
+static REL::Relocation<tCopyAndPotentiallyApplyHavokScaleToTransform> CopyAndPotentiallyApplyHavokScaleToTransform{ RELOCATION_ID(57731, 58301) };  // 9ED0F0, A11900
+
+typedef void (*thkbPoseLocalToPoseWorld)(int a_numBones, const int16_t* a_parentIndices, const RE::hkQsTransform& a_worldFromModel, RE::hkQsTransform* a_highResPoseLocal, RE::hkQsTransform* a_outLowResPoseWorld);
+static REL::Relocation<thkbPoseLocalToPoseWorld> hkbPoseLocalToPoseWorld{ RELOCATION_ID(63189, 64109) };  // B129E0, B37B50
 
 typedef void (*thkRotation_setFromQuat)(RE::hkRotation* a_this, const RE::hkQuaternion& a_quat);
 static REL::Relocation<thkRotation_setFromQuat> hkRotation_setFromQuat{ RELOCATION_ID(56674, 57081) };  // 9C7FC0, 9EC7B0
@@ -293,3 +333,36 @@ static REL::Relocation<tNiBound_Combine> NiBound_Combine{ RELOCATION_ID(69588, 7
 
 typedef float (*tActor_GetReach)(RE::Actor* a_this);
 static REL::Relocation<tActor_GetReach> Actor_GetReach{ RELOCATION_ID(37588, 38538) };  // 623F10, 649520
+
+typedef RE::NiObject* (*tNiObject_Clone)(RE::NiObject* a_object, const RE::NiCloningProcess& a_cloningProcess);
+static REL::Relocation<tNiObject_Clone> NiObject_Clone{ RELOCATION_ID(68836, 70188) };  // C52820, C79F30
+
+typedef void (*tCleanupCloneMap)(RE::BSTHashMap<RE::NiObject*, RE::NiObject*>& a_cloneMap);
+static REL::Relocation<tCleanupCloneMap> CleanupCloneMap{ RELOCATION_ID(15231, 15395) };  // 1B8AD0, 1C4460
+
+typedef void (*tCleanupProcessMap)(RE::BSTHashMap<RE::NiObject*, bool>& a_cloneMap);
+static REL::Relocation<tCleanupProcessMap> CleanupProcessMap{ RELOCATION_ID(15232, 15396) };  // 1B8B90, 1C4520
+
+typedef void (*tNiAVObject_RemoveFromWorld)(RE::NiAVObject* a_this, bool a2, bool a3);
+static REL::Relocation<tNiAVObject_RemoveFromWorld> NiAVObject_RemoveFromWorld{ RELOCATION_ID(76031, 77864) };  // DA80B0, DE7E20
+
+typedef void (*tBSAnimationGraphManager_SetWorld_SEOnly)(RE::BSAnimationGraphManager* a_this, RE::NiPointer<RE::bhkWorld>& a_world);
+static REL::Relocation<tBSAnimationGraphManager_SetWorld_SEOnly> BSAnimationGraphManager_SetWorld_SEOnly{ RELOCATION_ID(32189, 0) };  // 4F2400
+
+typedef void (*tIAnimationGraphManagerHolder_SetWorld_AEOnly)(RE::IAnimationGraphManagerHolder* a_this, RE::NiPointer<RE::bhkWorld>& a_world);
+static REL::Relocation<tIAnimationGraphManagerHolder_SetWorld_AEOnly> IAnimationGraphManagerHolder_SetWorld_AEOnly{ RELOCATION_ID(0, 38087) };  // 6392E0
+
+typedef void (*tSetActionDataName)(void* a1, RE::TESActionData* a_actionData);
+static REL::Relocation<tSetActionDataName> SetActionDataName{ RELOCATION_ID(37998, 38952) };  // 63B060, 661300
+
+typedef void (*tSetActionDataNameSource)(void* a1, RE::TESActionData* a_actionData);
+static REL::Relocation<tSetActionDataNameSource> SetActionDataNameSource{ RELOCATION_ID(36174, 37147) };  // 5CCB20, 5F0C20
+
+typedef void (*tSetActionDataNameTarget)(void* a1, RE::TESActionData* a_actionData);
+static REL::Relocation<tSetActionDataNameTarget> SetActionDataNameTarget{ RELOCATION_ID(32048, 32802) };  // 4ECF50, 505AD0
+
+typedef float (*tGetPlayerTimeMult)(void* a1);
+static REL::Relocation<tGetPlayerTimeMult> GetPlayerTimeMult{ RELOCATION_ID(43104, 44301) };  // 759420, 7873C0
+
+typedef float (*tAIProcess_PushActorAway)(RE::AIProcess* a_this, RE::Actor* a_actor, RE::NiPoint3& a_from, float a_force);
+static REL::Relocation<tAIProcess_PushActorAway> AIProcess_PushActorAway{ RELOCATION_ID(38858, 39895) };  // 67D4A0, 6A4B40

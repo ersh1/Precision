@@ -12,6 +12,7 @@ struct AttackTrail
 
 	RE::ActorHandle actorHandle;
 	RE::NiPointer<RE::BSTempEffectParticle> trailParticle;
+	RE::NiPointer<RE::BSTempEffectParticle> bloodTrailParticle;
 	RE::NiPointer<RE::NiNode> collisionNode;
 	RE::NiPointer<RE::NiNode> collisionParentNode;
 	RE::NiPointer<RE::NiNode> weaponNode;

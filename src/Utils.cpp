@@ -135,6 +135,68 @@ namespace Utils
 
 		return result;
 	}
+	
+	RE::NiQuaternion slerp(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB, double a_t)
+	{
+		// quaternion to return
+		RE::NiQuaternion result;
+		// Calculate angle between them.
+		float cosHalfTheta = DotProduct(a_quatA, a_quatB);
+		// if qa=qb or qa=-qb then theta = 0 and we can return qb
+		if (fabs(cosHalfTheta) >= 0.99999) {
+			result.w = a_quatB.w;
+			result.x = a_quatB.x;
+			result.y = a_quatB.y;
+			result.z = a_quatB.z;
+			return result;
+		}
+
+		// If the dot product is negative, slerp won't take
+		// the shorter path. Note that qb and -qb are equivalent when
+		// the negation is applied to all four components. Fix by
+		// reversing one quaternion.
+		RE::NiQuaternion q2 = a_quatB;
+		if (cosHalfTheta < 0) {
+			q2.w *= -1;
+			q2.x *= -1;
+			q2.y *= -1;
+			q2.z *= -1;
+			cosHalfTheta *= -1;
+		}
+
+		// Calculate temporary values.
+		float halfTheta = acosf(cosHalfTheta);
+		float sinHalfTheta = sqrtf(1.0 - cosHalfTheta * cosHalfTheta);
+		// if theta = 180 degrees then result is not fully defined
+		// we could rotate around any axis normal to qa or qb
+		if (fabs(sinHalfTheta) < 0.001) {  // fabs is floating point absolute
+			result.w = (a_quatA.w * 0.5 + q2.w * 0.5);
+			result.x = (a_quatA.x * 0.5 + q2.x * 0.5);
+			result.y = (a_quatA.y * 0.5 + q2.y * 0.5);
+			result.z = (a_quatA.z * 0.5 + q2.z * 0.5);
+			return result;
+		}
+		float ratioA = sinf((1 - a_t) * halfTheta) / sinHalfTheta;
+		float ratioB = sinf(a_t * halfTheta) / sinHalfTheta;
+		// calculate Quaternion
+		result.w = (a_quatA.w * ratioA + q2.w * ratioB);
+		result.x = (a_quatA.x * ratioA + q2.x * ratioB);
+		result.y = (a_quatA.y * ratioA + q2.y * ratioB);
+		result.z = (a_quatA.z * ratioA + q2.z * ratioB);
+		
+		return result;
+	}
+
+	RE::hkQsTransform lerphkQsTransform(RE::hkQsTransform& a_transfA, RE::hkQsTransform& a_transfB, float a_t)
+	{
+		RE::hkQsTransform result;
+
+		result.translation = NiPointToHkVector(lerp(HkVectorToNiPoint(a_transfA.translation), HkVectorToNiPoint(a_transfB.translation), a_t));
+		result.scale = NiPointToHkVector(lerp(HkVectorToNiPoint(a_transfA.scale), HkVectorToNiPoint(a_transfB.scale), a_t));
+		result.rotation = NiQuatToHkQuat(slerp(HkQuatToNiQuat(a_transfA.rotation), HkQuatToNiQuat(a_transfB.rotation), a_t));
+
+		return result;
+	}
 
 	RE::NiMatrix3 QuaternionToMatrix(const RE::NiQuaternion& a_quat)
 	{
@@ -166,6 +228,40 @@ namespace Utils
 		ret.entry[1][2] = 2.f * (tmp1 - tmp2) * invs;
 
 		return ret;
+	}
+
+	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB)
+	{
+		RE::NiQuaternion result;
+		result.w = a_quatA.w * a_quatB.w - a_quatA.x * a_quatB.x - a_quatA.y * a_quatB.y - a_quatA.z * a_quatB.z;
+		result.x = a_quatA.w * a_quatB.x + a_quatA.x * a_quatB.w + a_quatA.y * a_quatB.z - a_quatA.z * a_quatB.y;
+		result.y = a_quatA.w * a_quatB.y - a_quatA.x * a_quatB.z + a_quatA.y * a_quatB.w + a_quatA.z * a_quatB.x;
+		result.z = a_quatA.w * a_quatB.z + a_quatA.x * a_quatB.y - a_quatA.y * a_quatB.x + a_quatA.z * a_quatB.w;
+		return result;
+	}
+
+	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quat, float a_multiplier)
+	{
+		RE::NiQuaternion result;
+		result.w = a_quat.w * a_multiplier;
+		result.x = a_quat.x * a_multiplier;
+		result.y = a_quat.y * a_multiplier;
+		result.z = a_quat.z * a_multiplier;
+		return result;
+	}
+
+	RE::NiQuaternion NiQuaternionIdentity()
+	{
+		return RE::NiQuaternion{ 1.f, 0.f, 0.f, 0.f };
+	}
+
+	RE::NiQuaternion NormalizeNiQuat(const RE::NiQuaternion& a_quat)
+	{
+		float length = NiQuaternionLength(a_quat);
+		if (length) {
+			return NiQuaternionMultiply(a_quat, 1.f / length);
+		}
+		return NiQuaternionIdentity();
 	}
 
 	RE::NiMatrix3 MatrixFromAxisAngle(const RE::NiPoint3& axis, float theta)
@@ -265,6 +361,22 @@ namespace Utils
 		return false;
 	}
 
+	bool GetActorCollisionFilterInfo(RE::Actor* a_actor, uint32_t& a_outCollisionFilterInfo)
+	{
+		if (a_actor) {
+			if (RE::NiPointer<RE::NiAVObject> root = RE::NiPointer<RE::NiAVObject>(a_actor->Get3D())) {
+				if (auto rb = GetRigidBody(root.get())) {
+					if (auto hkpRigidBody = static_cast<RE::hkpRigidBody*>(rb->referencedObject.get())) {
+						a_outCollisionFilterInfo = hkpRigidBody->collidable.broadPhaseHandle.collisionFilterInfo;
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
 	RE::BGSBodyPartData* GetBodyPartData(RE::Actor* a_actor)
 	{
 		if (!a_actor) {
@@ -314,9 +426,9 @@ namespace Utils
 		return false;
 	}
 
-	RE::bhkRigidBody* GetFirstRigidBody(RE::NiAVObject* a_root)
+	RE::NiPointer<RE::bhkRigidBody> GetFirstRigidBody(RE::NiAVObject* a_root)
 	{
-		auto rigidBody = GetRigidBody(a_root);
+		auto rigidBody = RE::NiPointer<RE::bhkRigidBody>(GetRigidBody(a_root));
 		if (rigidBody) {
 			return rigidBody;
 		}
@@ -520,7 +632,7 @@ namespace Utils
 			return false;
 		}
 
-		RE::NiAVObject* object = a_actor->Get3D2();
+		RE::NiAVObject* object = a_actor->Get3D(false);
 		if (!object) {
 			return false;
 		}
@@ -580,7 +692,7 @@ namespace Utils
 		}
 	}
 
-	void TraverseMeshes(RE::NiAVObject* a_object, bool a_bStrict, std::function<void(RE::BSGeometry*)> a_func)
+	void TraverseMeshes(RE::NiAVObject* a_object, bool a_bStrict, const RE::NiTransform& a_transform, std::function<void(RE::BSGeometry*, const RE::NiTransform&)> a_func)
 	{
 		if (!a_object) {
 			return;
@@ -622,13 +734,14 @@ namespace Utils
 				return;
 			}
 
-			return a_func(geom);
+			return a_func(geom, a_transform);
 		}
 		
 		auto node = a_object->AsNode();
 		if (node) {
+			RE::NiTransform transform = a_transform * node->local;
 			for (auto& child : node->GetChildren()) {
-				TraverseMeshes(child.get(), a_bStrict, a_func);
+				TraverseMeshes(child.get(), a_bStrict, transform, a_func);
 			}
 		}
 	}
@@ -638,29 +751,36 @@ namespace Utils
 		RE::NiBound ret{};
 		bool bInitial = true;
 		
-		TraverseMeshes(a_obj, true, [&](auto&& a_geometry) {
+		RE::NiTransform transform{};
+		TraverseMeshes(a_obj, true, transform, [&](auto&& a_geometry, const RE::NiTransform& a_transform) {
 			RE::NiBound modelBound = a_geometry->modelBound;
 
 			modelBound.center = a_geometry->local * modelBound.center;
 			modelBound.radius *= a_geometry->local.scale;
 
+			modelBound.center = a_transform * modelBound.center;
+			modelBound.radius *= a_transform.scale;
+
 			if (bInitial) {
 				ret = modelBound;
 				bInitial = false;
-			} else {			
+			} else {
 				NiBound_Combine(ret, modelBound);
 			}
 		});
 
 		if (ret.radius == 0.f) {
 			// try less strict
-			TraverseMeshes(a_obj, false, [&](auto&& a_geometry) {
+			TraverseMeshes(a_obj, false, transform, [&](auto&& a_geometry, const RE::NiTransform& a_transform) {
 				RE::NiBound modelBound = a_geometry->modelBound;
 
 				modelBound.center *= a_geometry->local.scale;
 				modelBound.radius *= a_geometry->local.scale;
 
 				modelBound.center += a_geometry->local.translate;
+
+				modelBound.center = a_transform * modelBound.center;
+				modelBound.radius *= a_transform.scale;
 
 				if (bInitial) {
 					ret = modelBound;
@@ -798,6 +918,104 @@ namespace Utils
 				}
 			}
 		}
+	}
+
+	void SetBehaviorGraphWorld(RE::Actor* a_actor, RE::bhkWorld* a_world)
+	{
+		RE::BSAnimationGraphManagerPtr animGraphManager = nullptr;
+		a_actor->GetAnimationGraphManager(animGraphManager);
+		
+		if (animGraphManager) {
+			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
+
+			if (animGraphManager->graphs.size() <= 0) {
+				return;
+			}
+
+			for (auto& graph : animGraphManager->graphs) {
+				graph->SetWorld(a_world);
+			}			
+		}
+	}
+
+	void FillCloningProcess(RE::NiCloningProcess& a_cloningProcess, const RE::NiPoint3& a_scale)
+	{
+		auto cloneMap = reinterpret_cast<uintptr_t>(&a_cloningProcess.cloneMap);
+		auto value1 = reinterpret_cast<void**>(cloneMap + 0x18);
+		*value1 = g_unkCloneValue1;
+
+		auto processMap = reinterpret_cast<uintptr_t>(&a_cloningProcess.processMap);
+		auto value2 = reinterpret_cast<void**>(processMap + 0x18);
+		*value2 = g_unkCloneValue2;
+
+		a_cloningProcess.copyType = *g_unkCloneValue3;
+		a_cloningProcess.appendChar = *g_unkCloneValue4;
+
+		a_cloningProcess.unk68 = a_scale;
+	}
+
+	RE::MATERIAL_ID GetHitMaterialID(RE::hkpRigidBody* a_hitRigidBody, const RE::hkpContactPointEvent& a_event, int a_hitBodyIdx)
+	{
+		RE::MATERIAL_ID result = RE::MATERIAL_ID::kNone;
+		
+		if (auto shape = a_hitRigidBody->GetShape()) {
+			auto bhkShape = reinterpret_cast<RE::bhkShape*>(shape->userData);
+			result = bhkShape->materialID;
+
+			RE::hkpShapeKey* hitShapeKeys = a_event.GetShapeKeys(a_hitBodyIdx);
+			if (hitShapeKeys && *hitShapeKeys != RE::HK_INVALID_SHAPE_KEY) {
+				typedef RE::bhkCompressedMeshShape* (__thiscall RE::bhkShape::*Func34)() const;
+				auto compressedMeshShape = (bhkShape->*reinterpret_cast<Func34>(&RE::bhkShape::Unk_34))();
+				if (compressedMeshShape) {
+					typedef RE::MATERIAL_ID (__thiscall RE::bhkCompressedMeshShape::*Func36)(RE::hkpShapeKey a_shapeKey) const;
+					result = (compressedMeshShape->*reinterpret_cast<Func36>(&RE::bhkCompressedMeshShape::Unk_36))(*hitShapeKeys);
+				}
+			}
+		}
+
+		return result;
+	}
+
+	RE::BSVisit::BSVisitControl TraverseAllScenegraphCollisions(RE::NiAVObject* a_object, std::function<RE::BSVisit::BSVisitControl(RE::bhkNiCollisionObject*)> a_func)
+	{
+		if (!a_object) {
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		auto collision = static_cast<RE::bhkNiCollisionObject*>(a_object->collisionObject.get());
+		if (collision) {
+			auto result = a_func(collision);
+			if (result == RE::BSVisit::BSVisitControl::kStop) {
+				return result;
+			}
+		}
+
+		auto result = RE::BSVisit::BSVisitControl::kContinue;
+		auto node = a_object->AsNode();
+		if (node) {
+			for (auto& child : node->GetChildren()) {
+				result = TraverseAllScenegraphCollisions(child.get(), a_func);
+				if (result == RE::BSVisit::BSVisitControl::kStop) {
+					break;
+				}
+			}
+		}
+
+		return result;
+	}
+
+	float GetPlayerTimeMultiplier()
+	{
+		return GetPlayerTimeMult(*g_142EC5C60);
+	}
+
+	bool IsFirstPerson()
+	{
+		if (Settings::glob_IFPVFirstPerson) {
+			return Settings::glob_IFPVFirstPerson->value;
+		}
+
+		return RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
 	}
 
 }

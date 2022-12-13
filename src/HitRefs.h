@@ -10,6 +10,7 @@ struct HitRefs
 	bool HasHitRef(RE::ObjectRefHandle a_handle) const;
 	void AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearHitRefs();
+	void Clear();
 	void IncreaseDamagedCount();
 
 	inline uint32_t GetHitCount() const { return hitCount; }

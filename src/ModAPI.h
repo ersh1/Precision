@@ -7,6 +7,7 @@ namespace Messaging
 	using InterfaceVersion1 = ::PRECISION_API::IVPrecision1;
 	using InterfaceVersion2 = ::PRECISION_API::IVPrecision2;
 	using InterfaceVersion3 = ::PRECISION_API::IVPrecision3;
+	using InterfaceVersion4 = ::PRECISION_API::IVPrecision4;
 	using PreHitCallback = ::PRECISION_API::PreHitCallback;
 	using PostHitCallback = ::PRECISION_API::PostHitCallback;
 	using PrePhysicsStepCallback = ::PRECISION_API::PrePhysicsStepCallback;
@@ -16,8 +17,9 @@ namespace Messaging
 	using WeaponCollisionCallbackReturn = ::PRECISION_API::WeaponCollisionCallbackReturn;
 	using CollisionFilterSetupCallback = ::PRECISION_API::CollisionFilterSetupCallback;
 	using ContactListenerCallback = ::PRECISION_API::ContactListenerCallback;
+	using PrecisionLayerSetupCallback = ::PRECISION_API::PrecisionLayerSetupCallback;
 
-	class PrecisionInterface : public InterfaceVersion3
+	class PrecisionInterface : public InterfaceVersion4
 	{
 	private:
 		PrecisionInterface() = default;
@@ -64,5 +66,13 @@ namespace Messaging
 		virtual bool IsCharacterControllerHittable(RE::bhkCharacterController* a_characterController) const noexcept override;
 		virtual bool IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup) const noexcept override;
 		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept override;		
+
+		// InterfaceVersion4
+		virtual APIResult AddPrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle, PrecisionLayerSetupCallback&& a_callback) noexcept override;
+		virtual APIResult RemovePrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;
+		RE::NiAVObject* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) noexcept override;
+		RE::hkpRigidBody* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_hkpRigidBody) noexcept override;
+		virtual void ApplyHitImpulse2(RE::ActorHandle a_targetActorHandle, RE::ActorHandle a_sourceActorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept override;
+				
 	};
 }

@@ -22,6 +22,12 @@ namespace Utils
                                                  max;
 	}
 
+	[[nodiscard]] inline float AngleDifference(float a_angle1, float a_angle2)
+	{
+		float diff = fmodf(a_angle2 - a_angle1 + 180.f, 360.f) - 180.f;
+		return diff < -180.f ? diff + 360.f : diff;
+	}
+
 	struct Capsule
 	{
 		RE::NiPoint3 a;
@@ -57,7 +63,17 @@ namespace Utils
 	[[nodiscard]] RE::hkQsTransform NiTransformToHkQsTransform(const RE::NiTransform& a_niTransform);
 	[[nodiscard]] RE::NiTransform HkQsTransformToNiTransform(const RE::hkQsTransform& a_hkQsTransform);
 
+	[[nodiscard]] RE::NiQuaternion slerp(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB, double a_t);
+	[[nodiscard]] inline RE::NiPoint3 lerp(const RE::NiPoint3& a_A, const RE::NiPoint3& a_B, float a_t) { return a_A * (1.f - a_t) + a_B * a_t; }
+	[[nodiscard]] inline float lerp(float a_A, float a_B, float a_t) { return a_A * (1.f - a_t) + a_B * a_t; }
+	[[nodiscard]] RE::hkQsTransform lerphkQsTransform(RE::hkQsTransform& a_transfA, RE::hkQsTransform& a_transfB, float a_t);
+
 	RE::NiMatrix3 QuaternionToMatrix(const RE::NiQuaternion& a_quat);
+
+	inline RE::NiPoint3 ForwardVectorFromNiMatrix3(const RE::NiMatrix3& a_matrix)
+	{
+		return { a_matrix.entry[0][1], a_matrix.entry[1][1], a_matrix.entry[2][1] };
+	}
 
 	inline void SetRotatedDir(RE::hkVector4& vec, const RE::hkQuaternion& quat, const RE::hkVector4& direction)
 	{
@@ -119,6 +135,16 @@ namespace Utils
 	{
 		NormalizeHkVector4(quat.vec);
 	}
+
+	inline float DotProduct(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB) { return a_quatA.w * a_quatB.w + a_quatA.x * a_quatB.x + a_quatA.y * a_quatB.y + a_quatA.z * a_quatB.z; }
+	
+	inline float NiQuaternionLength(const RE::NiQuaternion& a_quat) { return sqrtf(DotProduct(a_quat, a_quat)); }
+
+	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB);
+	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quat, float a_multiplier);
+
+	RE::NiQuaternion NiQuaternionIdentity();
+	RE::NiQuaternion NormalizeNiQuat(const RE::NiQuaternion& a_quat);	
 
 	[[nodiscard]] inline RE::NiPoint3 RotateAngleAxis(const RE::NiPoint3& vec, const float angle, const RE::NiPoint3& axis)
 	{
@@ -196,13 +222,15 @@ namespace Utils
 		return nullptr;
 	}
 
+	[[nodiscard]] bool GetActorCollisionFilterInfo(RE::Actor* a_actor, uint32_t& a_outCollisionFilterInfo);
+
 	RE::BGSBodyPartData* GetBodyPartData(RE::Actor* a_actor);
 
 	bool IsNodeOrChildOfNode(RE::NiAVObject* a_object, RE::NiNode* a_node);
 
 	bool IsNodeOrChildOfNode(RE::NiAVObject* a_object, RE::BSFixedString& a_nodeName);
 
-	[[nodiscard]] RE::bhkRigidBody* GetFirstRigidBody(RE::NiAVObject* a_root);
+	[[nodiscard]] RE::NiPointer<RE::bhkRigidBody> GetFirstRigidBody(RE::NiAVObject* a_root);
 
 	bool FindRigidBody(RE::NiAVObject* a_root, RE::hkpRigidBody* a_outRigidBody);
 
@@ -279,4 +307,42 @@ namespace Utils
 	[[nodiscard]] std::vector<std::string_view> Tokenize(std::string_view a_string, const char a_delimiter);
 
 	void SetBonesKeyframed(RE::hkbRagdollDriver* a_driver);
+
+	void SetBehaviorGraphWorld(RE::Actor* a_actor, RE::bhkWorld* a_world);
+
+	void FillCloningProcess(RE::NiCloningProcess& a_cloningProcess, const RE::NiPoint3& a_scale);
+
+	[[nodiscard]] inline float GetUnarmedReach(RE::Actor* a_actor) {
+		if (auto race = a_actor->GetRace()) {
+			return race->data.unarmedReach;
+		}
+		return 0.f;
+	}
+
+	RE::MATERIAL_ID GetHitMaterialID(RE::hkpRigidBody* a_hitRigidBody, const RE::hkpContactPointEvent& a_event, int a_hitBodyIdx);
+
+	template <class T>
+	T* Clone(T* a_object, const RE::NiPoint3& a_scale)
+	{
+		if (!a_object) {
+			return nullptr;
+		}
+
+		RE::NiCloningProcess cloningProcess{};
+		FillCloningProcess(cloningProcess, a_scale);
+
+		auto clone = reinterpret_cast<T*>(NiObject_Clone(a_object, cloningProcess));
+
+		/*CleanupProcessMap(cloningProcess.processMap);
+		CleanupCloneMap(cloningProcess.cloneMap);*/
+
+		return clone;
+	}
+
+	// The one in commonlib doesn't traverse the children of a node with a collision object
+	RE::BSVisit::BSVisitControl TraverseAllScenegraphCollisions(RE::NiAVObject* a_object, std::function<RE::BSVisit::BSVisitControl(RE::bhkNiCollisionObject*)> a_func);
+
+	float GetPlayerTimeMultiplier();
+
+	bool IsFirstPerson();
 }

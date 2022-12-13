@@ -21,6 +21,7 @@ void Settings::Initialize()
 		}
 
 		glob_nemesis = dataHandler->LookupForm<RE::TESGlobal>(0x801, "Precision.esp");
+		glob_IFPVFirstPerson = dataHandler->LookupForm<RE::TESGlobal>(0x801, "IFPVDetector.esl");
 	}
 
 	defaultBodyPartData = RE::TESForm::LookupByID<RE::BGSBodyPartData>(0x1D);
@@ -190,8 +191,11 @@ void Settings::ReadSettings()
 					auto formIDs = definitionsTbl["BodyPartDataFormIDs"].as_array();
 					if (formIDs) {
 						for (auto& formIDEntry : *formIDs) {
-							auto formID = formIDEntry.value<uint32_t>();
-							auto pluginName = definitionsTbl["Plugin"].value<std::string_view>();
+							auto& formIDTbl = *formIDEntry.as_table();
+
+							auto formID = formIDTbl["FormID"].value<RE::FormID>();
+							auto pluginName = formIDTbl["Plugin"].value<std::string_view>();
+
 							auto bodyPartData = dataHandler->LookupForm<RE::BGSBodyPartData>(*formID, *pluginName);
 							if (bodyPartData) {
 								auto attacksArr = definitionsTbl["Attacks"].as_array();
@@ -454,7 +458,7 @@ void Settings::ReadSettings()
 
 						TrailOverride trailOverride{};
 
-						// conditions
+						// visuals
 						auto& trailVisualsTbl = *trailDefinitionTbl["Visuals"].as_table();
 						
 						// lifetime mult
@@ -521,6 +525,28 @@ void Settings::ReadSettings()
 				}
 			}
 
+			auto weaponLengthOverrideArr = tbl.get_as<toml::array>("WeaponLengthOverride");
+			if (weaponLengthOverrideArr) {
+				for (auto&& elem : *weaponLengthOverrideArr) {
+					auto& weaponLengthOverrideTbl = *elem.as_table();
+
+					auto weaponEntryTblPtr = weaponLengthOverrideTbl.get_as<toml::table>("Weapon");
+					if (weaponEntryTblPtr) {
+						auto& weaponEntryTbl = *weaponEntryTblPtr;
+						auto formID = weaponEntryTbl["FormID"].value<RE::FormID>();
+						auto pluginName = weaponEntryTbl["Plugin"].value<std::string_view>();
+
+						auto weapon = dataHandler->LookupForm<RE::TESObjectWEAP>(*formID, *pluginName);
+						if (weapon) {
+							auto lengthOverride = weaponLengthOverrideTbl["Length"].value<float>();
+							if (lengthOverride) {
+								weaponLengthOverrides.emplace(weapon, *lengthOverride);
+							}
+						}
+					}
+				}
+			}
+
 		} catch (const toml::parse_error& e) {
 			std::ostringstream ss;
 			ss
@@ -549,6 +575,7 @@ void Settings::ReadSettings()
 	trailDefinitionsAny.clear();
 	trailDefinitionsAll.clear();
 	attackEventPairs.clear();
+	weaponLengthOverrides.clear();
 
 	auto baseToml = std::filesystem::path(basecfg);
 	readToml(baseToml);
@@ -564,10 +591,10 @@ void Settings::ReadSettings()
 	}
 	
 	// sort trailDefinitions based on priority
-	std::stable_sort(trailDefinitionsAny.begin(), trailDefinitionsAny.end(), [](const auto& a, const auto& b) {
+	std::sort(trailDefinitionsAny.begin(), trailDefinitionsAny.end(), [](const auto& a, const auto& b) {
 		return a.priority > b.priority;
 	});
-	std::stable_sort(trailDefinitionsAll.begin(), trailDefinitionsAll.end(), [](const auto& a, const auto& b) {
+	std::sort(trailDefinitionsAll.begin(), trailDefinitionsAll.end(), [](const auto& a, const auto& b) {
 		return a.priority > b.priority;
 	});
 
@@ -592,6 +619,7 @@ void Settings::ReadSettings()
 		ReadFloatSetting(mcm, "AttackCollisions", "fDefaultCollisionLifetime", fDefaultCollisionLifetime);
 		ReadFloatSetting(mcm, "AttackCollisions", "fDefaultCollisionLifetimePowerAttackMult", fDefaultCollisionLifetimePowerAttackMult);
 		ReadFloatSetting(mcm, "AttackCollisions", "fHitSameRefCooldown", fHitSameRefCooldown);
+		ReadFloatSetting(mcm, "AttackCollisions", "fHitSameMaterialCooldown", fHitSameMaterialCooldown);
 		ReadFloatSetting(mcm, "AttackCollisions", "fFirstPersonAttackLengthOffset", fFirstPersonAttackLengthOffset);
 		ReadFloatSetting(mcm, "AttackCollisions", "fPlayerAttackLengthMult", fPlayerAttackLengthMult);
 		ReadFloatSetting(mcm, "AttackCollisions", "fPlayerAttackRadiusMult", fPlayerAttackRadiusMult);
@@ -605,6 +633,7 @@ void Settings::ReadSettings()
 
 		// Trails
 		ReadBoolSetting(mcm, "Trails", "bDisplayTrails", bDisplayTrails);
+		ReadBoolSetting(mcm, "Trails", "bTrailUseAttackCollisionLength", bTrailUseAttackCollisionLength);
 		ReadFloatSetting(mcm, "Trails", "fTrailSegmentLifetime", fTrailSegmentLifetime);
 		ReadFloatSetting(mcm, "Trails", "fTrailFadeOutTime", fTrailFadeOutTime);
 		ReadUInt32Setting(mcm, "Trails", "uTrailSegmentsPerSecond", uTrailSegmentsPerSecond);
@@ -639,8 +668,8 @@ void Settings::ReadSettings()
 		ReadBoolSetting(mcm, "Recoil", "bRecoilNPC", bRecoilNPC);
 		ReadBoolSetting(mcm, "Recoil", "bRecoilPowerAttack", bRecoilPowerAttack);
 		ReadBoolSetting(mcm, "Recoil", "bUseVanillaRecoil", bUseVanillaRecoil);
-		ReadFloatSetting(mcm, "Recoil", "fRecoilFirstPersonDistanceThreshold", fRecoilFirstPersonDistanceThreshold);
-		ReadFloatSetting(mcm, "Recoil", "fRecoilThirdPersonDistanceThreshold", fRecoilThirdPersonDistanceThreshold);
+		ReadBoolSetting(mcm, "Recoil", "bRemoveRecoilOnHitframe", bRemoveRecoilOnHitframe);
+		ReadFloatSetting(mcm, "Recoil", "fRecoilCollisionLength", fRecoilCollisionLength);
 
 		ReadBoolSetting(mcm, "Recoil", "bEnableRecoilCameraShake", bEnableRecoilCameraShake);
 		ReadFloatSetting(mcm, "Recoil", "fRecoilCameraShakeStrength", fRecoilCameraShakeStrength);
@@ -667,11 +696,11 @@ void Settings::ReadSettings()
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseDecayMult2", fHitImpulseDecayMult2);
 		ReadFloatSetting(mcm, "HitImpulse", "fHitImpulseDecayMult3", fHitImpulseDecayMult3);
 
-		// Active Ragdoll
-		ReadFloatSetting(mcm, "ActiveRagdoll", "fActiveRagdollStartDistance", fActiveRagdollStartDistance);
-		ReadFloatSetting(mcm, "ActiveRagdoll", "fActiveRagdollEndDistance", fActiveRagdollEndDistance);
-
-		ReadBoolSetting(mcm, "ActiveRagdoll", "bUseRagdollCollisionWhenAllowed", bUseRagdollCollisionWhenAllowed);
+		// Miscellaneous
+		ReadFloatSetting(mcm, "Miscellaneous", "fActiveActorDistance", fActiveActorDistance);
+		ReadBoolSetting(mcm, "Miscellaneous", "bHookAIWeaponReach", bHookAIWeaponReach);
+		ReadBoolSetting(mcm, "Miscellaneous", "bDisableCharacterBumper", bDisableCharacterBumper);
+		ReadBoolSetting(mcm, "Miscellaneous", "bUseRagdollCollisionWhenAllowed", bUseRagdollCollisionWhenAllowed);
 
 		// Debug
 		ReadBoolSetting(mcm, "Debug", "bDebug", bDebug);

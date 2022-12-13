@@ -56,7 +56,7 @@ bool Blender::Update(const struct ActiveRagdoll& a_ragdoll, [[maybe_unused]] con
 
 	TrackHeader* poseHeader = GetTrackHeader(a_inOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 	if (poseHeader && poseHeader->onFraction > 0.f) {
-		int numPoses = poseHeader->numData;
+		//int numPoses = poseHeader->numData;
 		RE::hkQsTransform* poseOut = (RE::hkQsTransform*)Track_getData(a_inOut, *poseHeader);
 
 		// Save initial pose if necessary
@@ -71,19 +71,41 @@ bool Blender::Update(const struct ActiveRagdoll& a_ragdoll, [[maybe_unused]] con
 		bIsFirstBlendFrame = false;
 
 		// Blend poses
-		if (type == BlendType::kAnimToRagdoll) {
-			hkbBlendPoses(numPoses, initialPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
-		} else if (type == BlendType::kRagdollToAnim) {
-			hkbBlendPoses(numPoses, initialPose.data(), a_ragdoll.animPose.data(), lerpAmount, poseOut);
-		} else if (type == BlendType::kCurrentAnimToRagdoll) {
-			hkbBlendPoses(numPoses, a_ragdoll.animPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
-		} else if (type == BlendType::kCurrentRagdollToAnim) {
-			hkbBlendPoses(numPoses, a_ragdoll.ragdollPose.data(), a_ragdoll.animPose.data(), lerpAmount, poseOut);
-		} else if (type == BlendType::kRagdollToCurrentRagdoll) {
-			hkbBlendPoses(numPoses, initialPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
+		switch (type)
+		{
+		case BlendType::kAnimToRagdoll:
+			{
+				uint32_t num = std::min(static_cast<uint32_t>(initialPose.size()), static_cast<uint32_t>(a_ragdoll.ragdollPose.size()));
+				hkbBlendPoses(num, initialPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
+				break;
+			}
+		case BlendType::kRagdollToAnim:
+			{
+				uint32_t num = std::min(static_cast<uint32_t>(initialPose.size()), static_cast<uint32_t>(a_ragdoll.animPose.size()));
+				hkbBlendPoses(num, initialPose.data(), a_ragdoll.animPose.data(), lerpAmount, poseOut);
+				break;
+			}
+		case BlendType::kCurrentAnimToRagdoll:
+			{
+				uint32_t num = std::min(static_cast<uint32_t>(a_ragdoll.animPose.size()), static_cast<uint32_t>(a_ragdoll.ragdollPose.size()));
+				hkbBlendPoses(num, a_ragdoll.animPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
+				break;
+			}
+		case BlendType::kCurrentRagdollToAnim:
+			{
+				uint32_t num = std::min(static_cast<uint32_t>(a_ragdoll.ragdollPose.size()), static_cast<uint32_t>(a_ragdoll.animPose.size()));
+				hkbBlendPoses(num, a_ragdoll.ragdollPose.data(), a_ragdoll.animPose.data(), lerpAmount, poseOut);
+				break;
+			}
+		case BlendType::kRagdollToCurrentRagdoll:
+			{
+				uint32_t num = std::min(static_cast<uint32_t>(initialPose.size()), static_cast<uint32_t>(a_ragdoll.ragdollPose.size()));
+				hkbBlendPoses(num, initialPose.data(), a_ragdoll.ragdollPose.data(), lerpAmount, poseOut);
+				break;
+			}
 		}
 
-		currentPose.assign(poseOut, poseOut + numPoses);  // save the blended pose in case we need to blend out from here
+		currentPose.assign(poseOut, poseOut + poseHeader->numData);  // save the blended pose in case we need to blend out from here
 	}
 
 	if (elapsedTime >= curve.duration) {

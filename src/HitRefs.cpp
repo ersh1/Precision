@@ -51,6 +51,15 @@ void HitRefs::ClearHitRefs()
 	hitRefs.clear();
 }
 
+void HitRefs::Clear()
+{
+	ClearHitRefs();
+	
+	hitCount = 0;
+	hitNPCCount = 0;
+	damagedCount = 0;
+}
+
 void HitRefs::IncreaseDamagedCount()
 {
 	++damagedCount;

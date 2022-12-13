@@ -28,6 +28,8 @@ namespace Hooks
 		static void UpdateAnimationInternal(RE::Actor* a_this, float a_deltaTime);
 		static void ApplyMovement(RE::Actor* a_this, float a_deltaTime);
 
+		static bool ShouldSetPitchModifier(RE::Actor* a_this);
+
 		static inline REL::Relocation<decltype(Nullsub)> _Nullsub;
 		static inline REL::Relocation<decltype(UpdateAnimationInternal)> _UpdateAnimationInternal;
 		static inline REL::Relocation<decltype(ApplyMovement)> _ApplyMovement;
@@ -101,6 +103,32 @@ namespace Hooks
 		static inline REL::Relocation<decltype(HitData_GetStagger)> _HitData_GetStagger;
 	};
 
+	class AIHooks
+	{
+	public:
+		static void Hook()
+		{
+			//REL::Relocation<std::uintptr_t> CombatInventoryItemMeleeVtbl{ RE::VTABLE_CombatInventoryItemMelee[0] };
+			//_GetMaxRange = CombatInventoryItemMeleeVtbl.write_vfunc(0x6, GetMaxRange);
+
+			//REL::Relocation<std::uintptr_t> TESObjectWEAPVtbl{ RE::VTABLE_TESObjectWEAP[0] };
+			//_Clone3D = TESObjectWEAPVtbl.write_vfunc(0x40, Clone3D);
+
+			REL::Relocation<std::uintptr_t> hook1{ RELOCATION_ID(43656, 44889) };  // 778290, 7A64E0
+
+			auto& trampoline = SKSE::GetTrampoline();
+			_GetMaxRange = trampoline.write_call<5>(hook1.address() + RELOCATION_OFFSET(0x147, 0x128), GetMaxRange);  // 7783D7, 7A6608
+		}
+
+	private:
+		//static float GetMaxRange(RE::CombatInventoryItem* a_this);
+		static RE::NiAVObject* Clone3D(RE::TESObjectWEAP* a_this, RE::TESObjectREFR* a_ref, bool a_arg3);
+		static float GetMaxRange(RE::Actor* a_actor, RE::TESBoundObject* a_object, int64_t a3);
+
+		static inline REL::Relocation<decltype(Clone3D)> _Clone3D;
+		static inline REL::Relocation<decltype(GetMaxRange)> _GetMaxRange;
+	};
+
 	class FirstPersonStateHook
 	{
 	public:
@@ -163,13 +191,30 @@ namespace Hooks
 			REL::Relocation<std::uintptr_t> HighActorCullerVtbl{ RE::VTABLE_HighActorCuller[0] };
 			_CullActors = HighActorCullerVtbl.write_vfunc(0x1, CullActors);
 
-			REL::Relocation<std::uintptr_t> RaceSexMenuVtbl{ RE::VTABLE_RaceSexMenu[0] };
-			_PostCreate = RaceSexMenuVtbl.write_vfunc(0x2, PostCreate);
+			REL::Relocation<std::uintptr_t> ActorVtbl{ RE::VTABLE_Actor[0] };
+			//_Actor_DetachHavok = ActorVtbl.write_vfunc(0x65, Actor_DetachHavok);
+			//_Actor_InitHavok = ActorVtbl.write_vfunc(0x66, Actor_InitHavok);
+
+			REL::Relocation<std::uintptr_t> CharacterVtbl{ RE::VTABLE_Character[0] };
+			//_Character_DetachHavok = CharacterVtbl.write_vfunc(0x65, Character_DetachHavok);
+			//_Character_InitHavok = CharacterVtbl.write_vfunc(0x66, Character_InitHavok);
+
+			REL::Relocation<std::uintptr_t> PlayerCharacterVtbl{ RE::VTABLE_PlayerCharacter[0] };
+			//_PlayerCharacter_DetachHavok = PlayerCharacterVtbl.write_vfunc(0x65, PlayerCharacter_DetachHavok);
+			//_PlayerCharacter_InitHavok = PlayerCharacterVtbl.write_vfunc(0x66, PlayerCharacter_InitHavok);
+			
+			REL::Relocation<std::uintptr_t> ChairFurnitureExitHandlerVtbl{ RE::VTABLE_ChairFurnitureExitHandler[0] };
+
+			REL::Relocation<std::uintptr_t> BShkbAnimationGraphVtbl{ RE::VTABLE_BShkbAnimationGraph[0] };
+			_SetWorld = BShkbAnimationGraphVtbl.write_vfunc(0x4, SetWorld);
 
 			REL::Relocation<uintptr_t> hook1{ RELOCATION_ID(38112, 39068) };  // 6403D0, 666990, Job_Ragdoll_post_physics
 			REL::Relocation<uintptr_t> hook2{ RELOCATION_ID(62416, 63358) };  // AE1F60, B06870, BSAnimationGraphManager::sub_140AE1F60
 			REL::Relocation<uintptr_t> hook3{ RELOCATION_ID(62621, 63562) };  // AEB8F0, B10A30, BShkbAnimationGraph::sub_140AEB8F0
 			REL::Relocation<uintptr_t> hook4{ RELOCATION_ID(62622, 63563) };  // AEBBF0, B10D30, BShkbAnimationGraph::sub_140AEBBF0
+			REL::Relocation<uintptr_t> hook5{ RELOCATION_ID(62642, 63587) };  // AEF630, B14F90, BShkbAnimationGraph::sub_140AEF630
+			
+			REL::Relocation<uintptr_t> hook6{ RELOCATION_ID(41805, 42886) };  // 723070, 74E1E0, EnableCharacterBumperHandler::Handle
 
 			REL::Relocation<uintptr_t> collisionFilterHook1{ RELOCATION_ID(76181, 78009) };  // DAF370, DEF410, hkpRigidBody
 			REL::Relocation<uintptr_t> collisionFilterHook2{ RELOCATION_ID(76676, 78548) };  // DD6780, E17640, hkpCollidableCollidableFilter_isCollisionEnabled
@@ -185,6 +230,11 @@ namespace Hooks
 
 			_hkbRagdollDriver_DriveToPose = trampoline.write_call<5>(hook3.address() + RELOCATION_OFFSET(0x25B, 0x256), hkbRagdollDriver_DriveToPose);  // AEBB4B, B10C86
 			_hkbRagdollDriver_PostPhysics = trampoline.write_call<5>(hook4.address() + RELOCATION_OFFSET(0x18C, 0x18B), hkbRagdollDriver_PostPhysics);  // AEBD7C, B10EBB
+
+			_BShkbAnimationGraph_ShouldAddToGraphListeners = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x37F, 0x38D), BShkbAnimationGraph_ShouldAddToGraphListeners);  // AEF9AF, B1531D
+
+			_QueueTask_ToggleCharacterBumper = trampoline.write_call<5>(hook6.address() + RELOCATION_OFFSET(0x1F, 0x1F), QueueTask_ToggleCharacterBumper);
+			_ToggleCharacterBumper = trampoline.write_call<5>(hook6.address() + RELOCATION_OFFSET(0x56, 0x56), ToggleCharacterBumper);
 
 			_bhkCollisionFilter_CompareFilterInfo1 = trampoline.write_call<5>(collisionFilterHook1.address() + RELOCATION_OFFSET(0x16F, 0x16F), bhkCollisionFilter_CompareFilterInfo1);  // DAF4DF, DEF57F
 			_bhkCollisionFilter_CompareFilterInfo2 = trampoline.write_call<5>(collisionFilterHook2.address() + RELOCATION_OFFSET(0x17, 0x17), bhkCollisionFilter_CompareFilterInfo2);    // DD6797, E17657
@@ -202,12 +252,17 @@ namespace Hooks
 
 		static void CullActors(void* a_this, RE::Actor* a_actor);
 
-		static void PostCreate(RE::RaceSexMenu* a_this);
+		static void SetWorld(RE::BShkbAnimationGraph* a_this, RE::bhkWorld* a_world);
 
 		static void ProcessHavokHitJobs(void* a1);
 		static void BShkbAnimationGraph_UpdateAnimation(RE::BShkbAnimationGraph* a_this, RE::BShkbAnimationGraph_UpdateData* a_updateData, void* a3);
 		static void hkbRagdollDriver_DriveToPose(RE::hkbRagdollDriver* a_driver, float a_deltaTime, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorOutput);
 		static void hkbRagdollDriver_PostPhysics(RE::hkbRagdollDriver* a_driver, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorInOut);
+
+		static bool BShkbAnimationGraph_ShouldAddToGraphListeners(RE::BShkbAnimationGraph* a_this);
+
+		static void QueueTask_ToggleCharacterBumper(void* a_taskManager, RE::Actor* a_actor, bool a_enable);
+		static void ToggleCharacterBumper(RE::bhkCharacterController* a_charController, bool a_enable);
 
 		static bool bhkCollisionFilter_CompareFilterInfo1(RE::bhkCollisionFilter* a_this, uint32_t a_filterInfoA, uint32_t a_filterInfoB);
 		static bool bhkCollisionFilter_CompareFilterInfo2(RE::bhkCollisionFilter* a_this, uint32_t a_filterInfoA, uint32_t a_filterInfoB);
@@ -219,17 +274,27 @@ namespace Hooks
 
 		static void HookPrePhysicsStep();
 
-		static void AddPrecisionCollisionLayer(RE::bhkWorld* a_world);
-		static void EnsurePrecisionCollisionLayer(RE::bhkWorld* a_world);
+		static void AddPrecisionCollisionLayers(RE::bhkWorld* a_world);
+		static void EnsurePrecisionCollisionLayers(RE::bhkWorld* a_world);
 		static void ReSyncLayerBitfields(RE::bhkCollisionFilter* a_filter, CollisionLayer a_layer);
-		static bool IsAddedToWorld(RE::ActorHandle a_actorHandle);
+
 		static bool CanAddToWorld(RE::ActorHandle a_actorHandle);
+
+		static bool IsSkeletonAddedToWorld(RE::ActorHandle a_actorHandle);
+		static bool AddSkeletonToWorld(RE::ActorHandle a_actorHandle);
+		static bool RemoveSkeletonFromWorld(RE::ActorHandle a_actorHandle);
+
+		static bool IsRagdollAddedToWorld(RE::ActorHandle a_actorHandle);		
 		static bool AddRagdollToWorld(RE::ActorHandle a_actorHandle);
 		static bool RemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
+		static bool ShouldRemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
+		static bool CanRemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
+		
 		static void ModifyConstraints(RE::Actor* a_actor);
 		static void DisableSyncOnUpdate(RE::Actor* a_actor);
 
 		static void ConvertLimitedHingeDataToRagdollConstraintData(RE::hkpRagdollConstraintData* a_ragdollData, RE::hkpLimitedHingeConstraintData* a_limitedHingeData);
+		static void SetPivotInWorldSpace(RE::hkpRagdollConstraintData* a_constraint, const RE::hkTransform& a_bodyATransform, const RE::hkTransform& a_bodyBTransform, const RE::hkVector4& a_pivot);
 		static RE::bhkRagdollConstraint* ConvertToRagdollConstraint(RE::bhkConstraint* a_constraint);
 
 		static void PreDriveToPose(RE::hkbRagdollDriver* a_driver, float a_deltaTime, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorOutput);
@@ -241,17 +306,25 @@ namespace Hooks
 		static void TryForceRigidBodyControls(RE::hkbGeneratorOutput& a_generatorOutput, RE::hkbGeneratorOutput::TrackHeader& a_header);
 		static void TryForcePoweredControls(RE::hkbGeneratorOutput& a_generatorOutput, RE::hkbGeneratorOutput::TrackHeader& a_header);
 		static void SetBonesKeyframedReporting(RE::hkbRagdollDriver* a_driver, RE::hkbGeneratorOutput& a_generatorOutput, RE::hkbGeneratorOutput::TrackHeader& a_header);
+		static void MapHighResPoseLocalToLowResPoseWorld(RE::hkbRagdollDriver* a_driver, const RE::hkQsTransform& a_worldFromModel, const RE::hkQsTransform* a_highResPoseLocal, std::vector<RE::hkQsTransform>& a_poseWorld);
 
 		static CollisionFilterComparisonResult CompareFilterInfo(RE::bhkCollisionFilter* a_collisionFilter, uint32_t a_filterInfoA, uint32_t a_filterInfoB);
 
-		static inline REL::Relocation<decltype(CullActors)> _CullActors;
+		static bool CloneSkeleton(RE::ActorHandle a_actorHandle);
 
-		static inline REL::Relocation<decltype(PostCreate)> _PostCreate;
+		static inline REL::Relocation<decltype(CullActors)> _CullActors;
+		
+		static inline REL::Relocation<decltype(SetWorld)> _SetWorld;
 
 		static inline REL::Relocation<decltype(ProcessHavokHitJobs)> _ProcessHavokHitJobs;
 		static inline REL::Relocation<decltype(BShkbAnimationGraph_UpdateAnimation)> _BShkbAnimationGraph_UpdateAnimation;
 		static inline REL::Relocation<decltype(hkbRagdollDriver_DriveToPose)> _hkbRagdollDriver_DriveToPose;
 		static inline REL::Relocation<decltype(hkbRagdollDriver_PostPhysics)> _hkbRagdollDriver_PostPhysics;
+		
+		static inline REL::Relocation<decltype(BShkbAnimationGraph_ShouldAddToGraphListeners)> _BShkbAnimationGraph_ShouldAddToGraphListeners;
+
+		static inline REL::Relocation<decltype(QueueTask_ToggleCharacterBumper)> _QueueTask_ToggleCharacterBumper;
+		static inline REL::Relocation<decltype(ToggleCharacterBumper)> _ToggleCharacterBumper;
 
 		static inline REL::Relocation<decltype(bhkCollisionFilter_CompareFilterInfo1)> _bhkCollisionFilter_CompareFilterInfo1;
 		static inline REL::Relocation<decltype(bhkCollisionFilter_CompareFilterInfo2)> _bhkCollisionFilter_CompareFilterInfo2;

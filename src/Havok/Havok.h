@@ -146,6 +146,23 @@ namespace RE
 		float constantRecoveryVelocity = 1.f;      // 10
 	};
 
+	struct hkbWorldFromModelModeData
+	{
+		enum class WorldFromModelMode : uint8_t
+		{
+			WORLD_FROM_MODEL_MODE_USE_OLD,        // 0
+			WORLD_FROM_MODEL_MODE_USE_INPUT,      // 1
+			WORLD_FROM_MODEL_MODE_COMPUTE,        // 2
+			WORLD_FROM_MODEL_MODE_NONE,           // 3
+			WORLD_FROM_MODEL_MODE_USE_ROOT_BONE,  // 4
+		};
+
+		int16_t poseMatchingBone0;  // 00
+		int16_t poseMatchingBone1;  // 02
+		int16_t poseMatchingBone2;  // 04
+		WorldFromModelMode mode;    // 06
+	};
+
 	struct hkbCharacterData : hkReferencedObject
 	{
 		float unk10;
@@ -477,6 +494,36 @@ namespace RE
 	static_assert(sizeof(hkbNodeInfo) == 0x90);
 
 	using NodeList = hkArray<hkbNodeInfo>;
+
+	class bhkBlendCollisionObject : public bhkCollisionObject
+	{
+	public:
+		inline static constexpr auto RTTI = RTTI_bhkBlendCollisionObject;
+		inline static auto Ni_RTTI = NiRTTI_bhkBlendCollisionObject;
+
+		~bhkBlendCollisionObject() override;  // 00
+		
+		float blendStrength;               // 28 - this affects how intensely to go from rigidBody position to node position. 0 means strictly follow rigidbody, 1 means strictly follow node.
+		float unk2C;                       // 2C
+		hkpMotion::MotionType motionType;  // 30
+		bhkWorld* world;                   // 38
+		uint32_t unk40;                    // 40
+	};
+	static_assert(sizeof(bhkBlendCollisionObject) == 0x48);
+
+	class bhkRigidBodyT : public bhkRigidBody
+	{
+	public:
+		inline static constexpr auto RTTI = RTTI_bhkRigidBodyT;
+		inline static auto Ni_RTTI = NiRTTI_bhkRigidBodyT;
+
+		~bhkRigidBodyT() override;  // 00
+
+		// members
+		hkQuaternion rotation;  // 40
+		hkVector4 translation;  // 50
+	};
+	static_assert(sizeof(bhkRigidBodyT) == 0x60);
 }
 
 void hkpWorld_removeContactListener(RE::hkpWorld* a_this, RE::hkpContactListener* a_worldListener);

@@ -118,7 +118,7 @@ namespace Messaging
 
 	void PrecisionInterface::ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept
 	{		
-		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_actorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true);
+		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_actorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true, true);
 	}
 
 	APIResult PrecisionInterface::AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback&& a_callback) noexcept
@@ -185,6 +185,40 @@ namespace Messaging
 	bool PrecisionInterface::ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept
 	{
 		return PrecisionHandler::ToggleDisableActor(a_actorHandle, a_bDisable);
+	}
+
+	APIResult PrecisionInterface::AddPrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle, PrecisionLayerSetupCallback&& a_callback) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->AddPrecisionLayerSetupCallback(a_pluginHandle, a_callback)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::AlreadyRegistered;
+		}
+	}
+
+	APIResult PrecisionInterface::RemovePrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle) noexcept
+	{
+		if (PrecisionHandler::GetSingleton()->RemovePrecisionLayerSetupCallback(a_pluginHandle)) {
+			return APIResult::OK;
+		} else {
+			return APIResult::NotRegistered;
+		}
+	}
+
+	RE::NiAVObject* PrecisionInterface::GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) noexcept
+	{
+		return PrecisionHandler::GetOriginalFromClone(a_actorHandle, a_node);
+	}
+
+	RE::hkpRigidBody* PrecisionInterface::GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_hkpRigidBody) noexcept
+	{
+		return PrecisionHandler::GetOriginalFromClone(a_actorHandle, a_hkpRigidBody);
+	}
+
+	void PrecisionInterface::ApplyHitImpulse2(RE::ActorHandle a_targetActorHandle, RE::ActorHandle a_sourceActorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept
+	{
+		bool bAttackerIsPlayer = a_sourceActorHandle.native_handle() == 0x100000;
+		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_targetActorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true, bAttackerIsPlayer);
 	}
 
 }

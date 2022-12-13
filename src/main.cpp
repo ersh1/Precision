@@ -107,7 +107,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	logger::info("{} v{}"sv, Plugin::NAME, Plugin::VERSION.string());
 
 	SKSE::Init(a_skse);
-	SKSE::AllocTrampoline(1 << 9);
+	SKSE::AllocTrampoline(1 << 10);
 
 	auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging->RegisterListener("SKSE", MessageHandler)) {
@@ -132,6 +132,8 @@ extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::Interfa
 	case PRECISION_API::InterfaceVersion::V2:
 		[[fallthrough]];
 	case PRECISION_API::InterfaceVersion::V3:
+		[[fallthrough]];
+	case PRECISION_API::InterfaceVersion::V4:
 		logger::info("Precision::RequestPluginAPI returned the API singleton");
 		return static_cast<void*>(api);
 	}

@@ -2,6 +2,8 @@ set(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(SOURCE_DIR "${ROOT_DIR}/src")
 set(SOURCE_FILES
+	"${SOURCE_DIR}/ActiveActor.cpp"
+	"${SOURCE_DIR}/ActiveActor.h"
 	"${SOURCE_DIR}/AttackCollision.cpp"
 	"${SOURCE_DIR}/AttackCollision.h"
 	"${SOURCE_DIR}/AttackTrail.cpp"

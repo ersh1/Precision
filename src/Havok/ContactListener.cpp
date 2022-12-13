@@ -43,17 +43,21 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	CollisionLayer layerA = static_cast<CollisionLayer>(rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo & 0x7f);
 	CollisionLayer layerB = static_cast<CollisionLayer>(rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo & 0x7f);
 
-	if (layerA != CollisionLayer::kPrecision && layerB != CollisionLayer::kPrecision) {
-		return;  // Every collision we care about involves the Precision layer
+	//uint16_t groupA = rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo >> 16;
+	//uint16_t groupB = rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo >> 16;
+
+	if (layerA != CollisionLayer::kPrecisionAttack && layerA != CollisionLayer::kPrecisionRecoil && layerB != CollisionLayer::kPrecisionAttack && layerB != CollisionLayer::kPrecisionRecoil) {
+		return;  // Every collision we care about involves the Precision Attack or recoil layer
 	}
 
-	auto hitRigidBody = layerA == CollisionLayer::kPrecision ? rigidBodyB : rigidBodyA;
+	auto hitRigidBody = (layerA == CollisionLayer::kPrecisionAttack || layerA == CollisionLayer::kPrecisionRecoil) ? rigidBodyB : rigidBodyA;
 	auto hittingRigidBody = hitRigidBody == rigidBodyA ? rigidBodyB : rigidBodyA;
 
 	int hitBodyIdx = rigidBodyA == hitRigidBody ? 0 : 1;
 
-	RE::bhkRigidBody* hittingRigidBodyWrapper = reinterpret_cast<RE::bhkRigidBody*>(hittingRigidBody->userData);
-	if (!hittingRigidBodyWrapper) {
+	RE::NiPointer<RE::bhkRigidBody> hitRigidBodyWrapper(reinterpret_cast<RE::bhkRigidBody*>(hitRigidBody->userData));
+	RE::NiPointer<RE::bhkRigidBody> hittingRigidBodyWrapper(reinterpret_cast<RE::bhkRigidBody*>(hittingRigidBody->userData));
+	if (!hitRigidBodyWrapper || !hittingRigidBodyWrapper) {
 		if (hittingRigidBody->collidable.broadPhaseHandle.objectQualityType == RE::hkpCollidableQualityType::kKeyframedReporting && !Utils::IsMoveableEntity(hitRigidBody)) {
 			// It's not a hit, so disable contact for keyframed/fixed objects in this case
 			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
@@ -65,6 +69,95 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	RE::TESObjectREFR* target = hitRigidBody->GetUserData();
 
 	CollisionLayer hitLayer = hitRigidBody == rigidBodyA ? layerA : layerB;
+	CollisionLayer hittingLayer = hitRigidBody == rigidBodyA ? layerB : layerA;
+
+	//uint16_t hitGroup = hitRigidBody == rigidBodyA ? groupA : groupB;
+	//uint16_t hittingGroup = hitRigidBody == rigidBodyA ? groupB : groupA;
+
+	// RECOIL
+	if (hittingLayer == CollisionLayer::kPrecisionRecoil) {
+		// Recoil layer is only used for recoil, so disable contact
+		a_event.contactPointProperties->flags |= RE::hkContactPointMaterial::FlagEnum::kIsDisabled;
+		
+		if (auto attackerActor = attacker->As<RE::Actor>()) {
+			auto precisionHandler = PrecisionHandler::GetSingleton();
+			auto attackerHandle = attackerActor->GetHandle();
+			auto node = GetNiObjectFromCollidable(hittingRigidBody->GetCollidable());
+
+			if (auto attackCollision = precisionHandler->GetAttackCollisionFromRecoilNode(attackerHandle, node)) {
+				if (!attackCollision->bIsRecoiling) {
+					bool bIsPlayer = attacker->IsPlayerRef();
+					bool bIsFirstPerson = bIsPlayer && Utils::IsFirstPerson();
+					bool bIsMovableEntity = Utils::IsMoveableEntity(hitRigidBody);
+					bool bIsDestructible = target && target->GetBaseObject() && target->GetBaseObject()->As<RE::BGSDestructibleObjectForm>();
+
+					if (!bIsMovableEntity && !bIsDestructible) {
+						if (bIsPlayer || (attackerActor && attackerActor->IsInCombat())) {  // don't do recoils for NPCs out of combat because of them hitting things like training dummies and recoiling
+							if (!attackerActor->IsInKillMove()) {                           // don't do recoils while in killmove, or bad things happen
+								int32_t rightWeaponType = 0;
+								attackerActor->GetGraphVariableInt("iRightHandType", rightWeaponType);
+								if (rightWeaponType > 0 && rightWeaponType < 7) {  // 1h & 2h melee
+
+									RE::hkVector4 hkHitPos = a_event.contactPoint->position;
+
+									RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
+									if (pointVelocity.IsEqual(RE::hkVector4())) {  // point velocity is zero
+										auto hittingNode = GetNiObjectFromCollidable(&hittingRigidBody->collidable);
+										pointVelocity = GetParentNodePointVelocity(hittingNode, hkHitPos);
+									}
+
+									if (pointVelocity.IsEqual(RE::hkVector4())) {  // still zero, skip this collision
+										a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+										return;
+									}
+
+									RE::NiPoint3 niHitPos = Utils::HkVectorToNiPoint(hkHitPos) * *g_worldScaleInverse;
+									float feetPosition = attackerActor->GetPositionZ();
+
+									// skip recoil if contact point is close to feet level
+									if (fabs(feetPosition - niHitPos.z) > Settings::fGroundFeetDistanceThreshold) {
+										auto& attackData = attackerActor->GetActorRuntimeData().currentProcess->high->attackData;
+										if (attackData) {
+											// skip recoil if the attack is a power attack
+											if (Settings::bRecoilPowerAttack || attackData->data.flags.none(RE::AttackData::AttackFlag::kPowerAttack)) {
+												// Get hit material ID
+												RE::MATERIAL_ID materialID = Utils::GetHitMaterialID(hitRigidBody, a_event, hitBodyIdx);
+
+												auto materialType = GetBGSMaterialType(materialID);
+												if (materialType && Settings::recoilMaterials.contains(materialType)) {
+													bool bUseVanillaEvent = Settings::bUseVanillaRecoil || bIsFirstPerson;
+
+													attackerActor->NotifyAnimationGraph(bIsFirstPerson ? Settings::firstPersonRecoilEvent : bUseVanillaEvent ? Settings::vanillaRecoilEvent :
+																																							   Settings::recoilEvent);
+
+													if (Settings::bEnableRecoilCameraShake && attackerActor->IsPlayerRef()) {
+														precisionHandler->ApplyCameraShake(
+															Settings::fRecoilCameraShakeStrength, Settings::fRecoilCameraShakeDuration,
+															Settings::fRecoilCameraShakeFrequency, 0.f);
+													}										
+
+													// Queue a FX only hit so we get the impact vfx and sound. No damage etc
+													{
+														WriteLocker locker(PrecisionHandler::pendingHitsLock);
+														PrecisionHandler::pendingHits.emplace_back(attackerActor, target, hitRigidBodyWrapper, hittingRigidBodyWrapper, a_event, pointVelocity, hitBodyIdx, attackCollision, true);
+													}
+
+													// Set the recoil flag so we don't recoil/hit again and remove the attack collision
+													attackCollision->bIsRecoiling = true;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return;
+	}
 
 	if (!attacker || attacker->formType != RE::FormType::ActorCharacter) {
 		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
@@ -94,6 +187,11 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		return;
 	}
 
+	if (attackCollision->bIsRecoiling) {
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		return;
+	}
+
 	RE::NiPoint3 niHitPos = Utils::HkVectorToNiPoint(hkHitPos) * *g_worldScaleInverse;
 
 	RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
@@ -108,7 +206,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		return;
 	}
 
-	if (layerA == CollisionLayer::kPrecision && layerB == CollisionLayer::kPrecision) {
+	if (layerA == CollisionLayer::kPrecisionAttack && layerB == CollisionLayer::kPrecisionAttack) {
 		if (precisionHandler->weaponWeaponCollisionCallbacks.size() > 0) {
 			RE::hkpShapeKey* hittingBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx ? 0 : 1);
 			RE::hkpShapeKey* hitBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx);
@@ -117,6 +215,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			
 			auto niSeparatingNormal = Utils::HkVectorToNiPoint(a_event.contactPoint->separatingNormal);
 			RE::NiPoint3 niHitVelocity = Utils::HkVectorToNiPoint(pointVelocity) * *g_worldScaleInverse;
+
 			PRECISION_API::PrecisionHitData precisionHitData(attackerActor, target, hitRigidBody, hittingRigidBody, niHitPos, niSeparatingNormal, niHitVelocity, hitBodyShapeKey, hittingBodyShapeKey);
 			auto callbackReturns = precisionHandler->RunWeaponWeaponCollisionCallbacks(precisionHitData);
 
@@ -144,6 +243,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 				auto niSeparatingNormal = Utils::HkVectorToNiPoint(a_event.contactPoint->separatingNormal);
 				RE::NiPoint3 niHitVelocity = Utils::HkVectorToNiPoint(pointVelocity) * *g_worldScaleInverse;
+
 				PRECISION_API::PrecisionHitData precisionHitData(attackerActor, target, hitRigidBody, hittingRigidBody, niHitPos, niSeparatingNormal, niHitVelocity, hitBodyShapeKey, hittingBodyShapeKey);
 				auto callbackReturns = precisionHandler->RunWeaponProjectileCollisionCallbacks(precisionHitData);
 
@@ -167,7 +267,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		// if not actor, check actual weapon length if relevant
 		// don't do this for player in first person
 		bool bIsPlayer = attackerActor->IsPlayerRef();
-		bool bIsFirstPerson = bIsPlayer && RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
+		bool bIsFirstPerson = bIsPlayer && Utils::IsFirstPerson();
 
 		auto hittingNode = GetNiObjectFromCollidable(&hittingRigidBody->collidable);
 
@@ -184,77 +284,22 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			}
 		}
 
-		// check recoil
-		if ((bIsPlayer ? Settings::bRecoilPlayer : Settings::bRecoilNPC) && !attackCollision->bNoRecoil && !Utils::IsMoveableEntity(hitRigidBody) && (!target || !target->GetBaseObject() || !target->GetBaseObject()->As<RE::BGSDestructibleObjectForm>())) {
-			if (bIsPlayer || (attackerActor && attackerActor->IsInCombat())) {  // don't do recoils for NPCs out of combat because of them hitting things like training dummies and recoiling
-				if (attackerActor && !attackerActor->IsInKillMove()) {          // don't do recoils while in killmove, or bad things happen
-					int32_t rightWeaponType = 0;
-					attackerActor->GetGraphVariableInt("iRightHandType", rightWeaponType);
-					if (rightWeaponType > 0 && rightWeaponType < 7) {  // 1h & 2h melee
-						bool bIsCloseEnough = bIsFirstPerson ? RE::PlayerCamera::GetSingleton()->cameraRoot->world.translate.GetDistance(niHitPos) <= Settings::fRecoilFirstPersonDistanceThreshold : hitDistanceFromWeaponRoot <= Settings::fRecoilThirdPersonDistanceThreshold;
+		// Get hit material ID
+		RE::MATERIAL_ID materialID = Utils::GetHitMaterialID(hitRigidBody, a_event, hitBodyIdx);
 
-						bool bIsBashing = attackerActor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
+		bool bIsMovableEntity = Utils::IsMoveableEntity(hitRigidBody);
+		bool bIsDestructible = target && target->GetBaseObject() && target->GetBaseObject()->As<RE::BGSDestructibleObjectForm>();
 
-						bool bDoRecoil = bIsCloseEnough && !bIsBashing;
-
-						if (bDoRecoil) {
-							// skip recoil if contact point is close to feet level
-							if (fabs(feetPosition - niHitPos.z) < Settings::fGroundFeetDistanceThreshold) {
-								bDoRecoil = false;
-							}
-						}
-
-						if (bDoRecoil) {
-							auto& attackData = attackerActor->GetActorRuntimeData().currentProcess->high->attackData;
-							if (attackData) {
-								if (!Settings::bRecoilPowerAttack && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {  // skip recoil if the attack is a power attack
-									bDoRecoil = false;
-								}
-							}
-						}
-
-						if (bDoRecoil) {
-							if (auto shape = hitRigidBody->GetShape()) {
-								auto bhkShape = reinterpret_cast<RE::bhkShape*>(shape->userData);
-								RE::MATERIAL_ID materialID = bhkShape->materialID;
-
-								RE::hkpShapeKey* hitShapeKeys = a_event.GetShapeKeys(hitBodyIdx);
-								if (hitShapeKeys && *hitShapeKeys != RE::HK_INVALID_SHAPE_KEY) {
-									typedef RE::bhkCompressedMeshShape* (__thiscall RE::bhkShape::*Func34)() const;
-									auto compressedMeshShape = (bhkShape->*reinterpret_cast<Func34>(&RE::bhkShape::Unk_34))();
-									if (compressedMeshShape) {
-										typedef RE::MATERIAL_ID (__thiscall RE::bhkCompressedMeshShape::*Func36)(
-											RE::hkpShapeKey a_shapeKey) const;
-										materialID =
-											(compressedMeshShape->*reinterpret_cast<Func36>(&RE::bhkCompressedMeshShape::Unk_36))(*hitShapeKeys);
-									}
-								}
-
-								auto materialType = GetBGSMaterialType(materialID);
-								if (materialType && Settings::recoilMaterials.contains(materialType)) {
-									bool bUseVanillaEvent = Settings::bUseVanillaRecoil || bIsFirstPerson;
-
-									attackerActor->NotifyAnimationGraph(bIsFirstPerson ? Settings::firstPersonRecoilEvent : bUseVanillaEvent ? Settings::vanillaRecoilEvent :
-                                                                                                                                               Settings::recoilEvent);
-
-									if (Settings::bEnableRecoilCameraShake && attackerActor->IsPlayerRef()) {
-										precisionHandler->ApplyCameraShake(
-											Settings::fRecoilCameraShakeStrength, Settings::fRecoilCameraShakeDuration,
-											Settings::fRecoilCameraShakeFrequency, 0.f);
-									}
-
-									if (Settings::bDebug && Settings::bDisplayRecoilCollisions) {
-										constexpr glm::vec4 recoilColor{ 1, 0, 1, 1 };
-										DrawHandler::AddPoint(niHitPos, 2.f, recoilColor, true);
-									}
-
-									precisionHandler->RemoveAttackCollision(attackerHandle, attackCollision);
-								}
-							}
-						}
-					}
-				}
+		// hit same material cooldown
+		if (!bIsMovableEntity && !bIsDestructible) {
+			// check if already has hit the same material recently
+			if (attackCollision->HasHitMaterial(materialID)) {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				return;
 			}
+
+			// add to already hit materials
+			attackCollision->AddHitMaterial(materialID, Settings::fHitSameMaterialCooldown);
 		}
 
 		// check ground shake
@@ -292,6 +337,8 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 	}
 
+	auto targetActorHandle = targetActor->GetHandle();
+
 	// while in combat, filter out actors like teammates etc.
 	if (targetActor && attackerActor && precisionHandler->CheckActorInCombat(attackerHandle)) {
 		// don't let player hit their teammates or summons
@@ -317,21 +364,21 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		
 		// don't let the player's teammates or summons hit the player
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
-			if (attackerCombatTarget != targetActor->GetHandle()) {
+			if (attackerCombatTarget != targetActorHandle) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;
 			}
 		}
 		// don't let the player's teammates hit each other
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsTeammate) {
-			if (attackerCombatTarget != targetActor->GetHandle()) {
+			if (attackerCombatTarget != targetActorHandle) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;
 			}
 		}
 
 		// don't hit actors that aren't hostile and are in combat already
-		if (Settings::bNoNonHostileAttackCollision && precisionHandler->CheckActorInCombat(targetActor->GetHandle()) && !targetActor->IsHostileToActor(attackerActor)) {
+		if (Settings::bNoNonHostileAttackCollision && precisionHandler->CheckActorInCombat(targetActorHandle) && !targetActor->IsHostileToActor(attackerActor)) {
 			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 			return;
 		}
@@ -374,89 +421,17 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 	}
 
-	// do hitstop and camera shake
-	if (Settings::bEnableHitstop || (Settings::bEnableHitstopCameraShake && attackerActor->IsPlayerRef())) {
-		//uint32_t hitCount = targetActor ? attackCollision->GetHitNPCCount() : attackCollision->GetHitCount();
-		uint32_t hitCount = targetActor ? precisionHandler->GetHitNPCCount(attackerHandle) : precisionHandler->GetHitCount(attackerHandle);
-
-		bool bIsActorAlive = targetActor ? !targetActor->IsDead() : false;
-		bool bIsPowerAttack = false;
-		bool bIsTwoHanded = false;
-
-		auto& attackData = attackerActor->GetActorRuntimeData().currentProcess->high->attackData;
-		if (attackData && attackData->data.flags.any(RE::AttackData::AttackFlag::kPowerAttack)) {
-			bIsPowerAttack = true;
-		}
-
-		if (auto attackingObject = attackerActor->GetAttackingWeapon()) {
-			if (auto attackingWeapon = attackingObject->object->As<RE::TESObjectWEAP>()) {
-				if (attackingWeapon->GetWeaponType() == RE::WEAPON_TYPE::kTwoHandAxe || attackingWeapon->GetWeaponType() == RE::WEAPON_TYPE::kTwoHandSword) {
-					bIsTwoHanded = true;
-				}
-			}
-		}
-
-		if (Settings::bEnableHitstop) {
-			// skip hitstop if not hitting an actor and contact point is close to feet level
-			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fGroundFeetDistanceThreshold) {
-				float diminishingReturnsMultiplier = pow(Settings::fHitstopDurationDiminishingReturnsFactor, hitCount - 1);
-
-				float hitstopLength = (bIsActorAlive ? Settings::fHitstopDurationNPC : Settings::fHitstopDurationOther) * diminishingReturnsMultiplier;
-
-				if (bIsPowerAttack) {
-					hitstopLength *= Settings::fHitstopDurationPowerAttackMultiplier;
-				}
-
-				if (bIsTwoHanded) {
-					hitstopLength *= Settings::fHitstopDurationTwoHandedMultiplier;
-				}
-
-				precisionHandler->AddHitstop(attackerHandle, hitstopLength);
-				if (Settings::bApplyHitstopToTarget && targetActor) {
-					precisionHandler->AddHitstop(targetActor->GetHandle(), hitstopLength);
-				}
-			}
-		}
-
-		if (Settings::bEnableHitstopCameraShake && attackerActor->IsPlayerRef()) {
-			/*RE::NiPoint3 niHitPos = Utils::HkVectorToNiPoint(hkHitPos) * *g_worldScaleInverse;
-			ApplyCameraShake(targetActor ? Settings::fHitstopCameraShakeStrengthNPC : Settings::fHitstopCameraShakeStrengthOther, niHitPos, Settings::fHitstopCameraShakeLength);*/
-
-			//*g_currentCameraShakeStrength = targetActor ? Settings::fHitstopCameraShakeStrengthNPC : Settings::fHitstopCameraShakeStrengthOther;
-
-			// skip camera shake if not hitting an actor and contact point is close to feet level
-			if (targetActor || fabs(feetPosition - niHitPos.z) >= Settings::fGroundFeetDistanceThreshold) {
-				float diminishingReturnsMultiplier = pow(Settings::fHitstopCameraShakeDurationDiminishingReturnsFactor, hitCount - 1);
-
-				float cameraShakeLength = (bIsActorAlive ? Settings::fHitstopCameraShakeDurationNPC : Settings::fHitstopCameraShakeDurationOther) * diminishingReturnsMultiplier;
-				float cameraShakeStrength = (bIsActorAlive ? Settings::fHitstopCameraShakeStrengthNPC : Settings::fHitstopCameraShakeStrengthOther) * diminishingReturnsMultiplier;
-
-				if (bIsPowerAttack) {
-					cameraShakeStrength *= Settings::fHitstopCameraShakePowerAttackMultiplier;
-					cameraShakeLength *= Settings::fHitstopCameraShakePowerAttackMultiplier;
-				}
-
-				if (bIsTwoHanded) {
-					cameraShakeStrength *= Settings::fHitstopCameraShakeTwoHandedMultiplier;
-					cameraShakeLength *= Settings::fHitstopCameraShakeTwoHandedMultiplier;
-				}
-
-				precisionHandler->ApplyCameraShake(cameraShakeStrength, cameraShakeLength, Settings::fHitstopCameraShakeFrequency, 0.f);
-			}
-		}
-	}
-
 	// do not damage actors in a killmove
 	if (targetActor && targetActor->IsInKillMove()) {
 		return;
 	}
 
-	if (Settings::bDebug && Settings::bDisplayHitLocations) {
-		constexpr glm::vec4 red{ 1.0, 0.0, 0.0, 1.0 };
-		DrawHandler::AddPoint(niHitPos, 1.f, red);
-	}
+	{
+		WriteLocker locker(PrecisionHandler::pendingHitsLock);
+		PrecisionHandler::pendingHits.emplace_back(attackerActor, target, hitRigidBodyWrapper, hittingRigidBodyWrapper, a_event, pointVelocity, hitBodyIdx, attackCollision);
 
-	PrecisionHandler::pendingHits.emplace_back(attackerActor, target, hitRigidBody, hittingRigidBody, a_event, pointVelocity, hitBodyIdx, attackCollision);
+		//logger::debug("hitLayer({}) hittingLayer({}), hitGroup({}) hittingGroup({})", hitLayer, hittingLayer, hitGroup, hittingGroup);
+	}
 }
 
 void ContactListener::CollisionAddedCallback(const RE::hkpCollisionEvent& a_event)

@@ -18,12 +18,16 @@ struct AttackCollision
 	std::optional<RE::NiPoint3> groundShake;
 
 	RE::ActorHandle actorHandle;
-	RE::NiPointer<RE::NiNode> collisionNode;
+	RE::NiPointer<RE::NiNode> attackCollisionNode;
+	RE::NiPointer<RE::NiNode> recoilCollisionNode;
 	float capsuleLength = 0.f;
 	float visualWeaponLength = 0.f;
 
-	RE::NiNode* AddCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
-	bool RemoveCollision(RE::ActorHandle a_actorHandle);
+	bool Add(const CollisionDefinition& a_collisionDefinition);
+	bool Remove();
+	bool RemoveRecoilCollision();
+
+	bool IsValid() const;
 
 	float GetVisualWeaponLength() const;
 
@@ -31,6 +35,10 @@ struct AttackCollision
 	void AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
 	void ClearHitRefs();
 	void IncreaseDamagedCount();
+
+	bool HasHitMaterial(RE::MATERIAL_ID a_materialID) const;
+	void AddHitMaterial(RE::MATERIAL_ID a_materialID, float a_duration);
+	void ClearHitMaterials();
 
 	uint32_t GetHitCount() const;
 	uint32_t GetHitNPCCount() const;
@@ -40,31 +48,38 @@ struct AttackCollision
 	uint32_t lastUpdate = 0;
 	static inline uint32_t lastSplashUpdate = 0;
 
+	bool bIsRecoiling = false;
+
 private:
+	mutable Lock hitMaterialsLock;
+	
+	bool CreateCollision(RE::bhkWorld* a_world, RE::Actor* a_actor, RE::NiNode* a_parentNode, RE::NiNode* a_newNode, RE::hkVector4& a_vertexA, RE::hkVector4& a_vertexB, float a_radius, CollisionLayer a_collisionLayer);
+	bool RemoveCollision(RE::NiPointer<RE::NiNode>& a_node);	
+	
 	HitRefs _hitRefs{};
+	std::unordered_map<RE::MATERIAL_ID, float> _hitMaterials;
 };
 
 struct AttackCollisions
 {
-	AttackCollisions(std::optional<uint32_t> a_ignoreVanillaAttackEvents = std::nullopt) :
-		ignoreVanillaAttackEvents(a_ignoreVanillaAttackEvents)
-	{}
-
 	void Update(float a_deltaTime);
 
 	[[nodiscard]] bool IsEmpty() const;
-	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) const;
-	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(RE::ActorHandle a_actorHandle, std::string_view a_nodeName) const;
+	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(RE::NiAVObject* a_node) const;
+	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollisionFromRecoilNode(RE::NiAVObject* a_node) const;
+	[[nodiscard]] std::shared_ptr<AttackCollision> GetAttackCollision(std::string_view a_nodeName) const;
 	void AddAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
-	[[nodiscard]] bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition);
-	[[nodiscard]] bool RemoveAttackCollision(RE::ActorHandle a_actorHandle, std::shared_ptr<AttackCollision> a_attackCollision);
-	bool RemoveAllAttackCollisions(RE::ActorHandle a_actorHandle);
+	bool RemoveRecoilCollision();
+	[[nodiscard]] bool RemoveAttackCollision(const CollisionDefinition& a_collisionDefinition);
+	[[nodiscard]] bool RemoveAttackCollision(std::shared_ptr<AttackCollision> a_attackCollision);
+	bool RemoveAllAttackCollisions();
+
+	void OnCollisionRemoved();
+	void ClearData();
 
 	void ForEachAttackCollision(std::function<void(std::shared_ptr<AttackCollision>)> a_func) const;
 
 	bool HasHitRef(RE::ObjectRefHandle a_handle) const;
-	void AddHitRef(RE::ObjectRefHandle a_handle, float a_duration, bool a_bIsNPC);
-	void ClearHitRefs();
 	uint32_t GetHitCount() const;
 	uint32_t GetHitNPCCount() const;
 
@@ -76,7 +91,7 @@ struct AttackCollisions
 	uint32_t GetIDHitNPCCount(uint8_t a_ID) const;
 	uint32_t GetIDDamagedCount(uint8_t a_ID) const;
 
-	std::optional<uint32_t> ignoreVanillaAttackEvents;
+	std::optional<uint32_t> ignoreVanillaAttackEvents = std::nullopt;
 	bool bStartedWithWeaponSwing = false;
 	bool bStartedWithWPNSwingUnarmed = false;
 	
@@ -88,7 +103,4 @@ private:
 	
 	// Hit refs shared by collisions with assigned IDs
 	std::unordered_map<uint8_t, HitRefs> _IDHitRefs{};
-
-	// Sum of all hit refs
-	HitRefs _hitRefs{};
 };

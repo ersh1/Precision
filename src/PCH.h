@@ -119,7 +119,9 @@ enum class CollisionLayer
 	kDroppingPick = 46,
 
 	// Added
-	kPrecision = 56
+	kPrecisionAttack = 56,
+	kPrecisionBody = 57,
+	kPrecisionRecoil = 58
 };
 
 #define DLLEXPORT __declspec(dllexport)
