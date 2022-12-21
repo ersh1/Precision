@@ -3,8 +3,8 @@
 #include "PrecisionHandler.h"
 #include "Settings.h"
 #include "Utils.h"
-#include "render/line_drawer.h"
 #include "render/DrawHandler.h"
+#include "render/line_drawer.h"
 
 AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength, std::optional<TrailOverride> a_trailOverride /*= std::nullopt*/) :
 	actorHandle(a_actorHandle)
@@ -15,7 +15,7 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 		collisionParentNode = RE::NiPointer<RE::NiNode>(a_node->parent);
 		collisionNodeLocalTransform = collisionNode->local;
 		//collisionNodeLocalTransform.rotate = collisionNodeLocalTransform.rotate * weaponRotation;
-		
+
 		std::string trailMeshPath = Settings::attackTrailMeshPath;
 
 		if (a_trailOverride) {
@@ -52,8 +52,7 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 		trailParticle = RE::NiPointer<RE::BSTempEffectParticle>(RE::BSTempEffectParticle::Spawn(a_cell, 10.f, trailMeshPath.data(), collisionParentNode->world.rotate, collisionParentNode->world.translate, 1.f, 7, nullptr));
 
 		float length = 0.f;
-		if (!a_bTrailUseTrueLength)
-		{
+		if (!a_bTrailUseTrueLength) {
 			weaponNode = RE::NiPointer<RE::NiNode>(static_cast<RE::NiNode*>(a_node->parent->children[0].get()));
 			if (weaponNode && weaponNode != collisionNode) {
 				if (a_weaponItem && a_weaponItem->object) {
@@ -84,11 +83,11 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 	}
 }
 
-void AttackTrail::Update(float a_deltaTime)
+bool AttackTrail::Update(float a_deltaTime)
 {
 	if (Settings::bDisplayTrails) {
 		if (!bActive) {
-			return;
+			return false;
 		}
 
 		//a_deltaTime = PrecisionHandler::GetHitstop(actorHandle, a_deltaTime, false);
@@ -110,162 +109,164 @@ void AttackTrail::Update(float a_deltaTime)
 		transform = transform * collisionNodeLocalTransform;
 		//transform.rotate = transform.rotate * weaponRotation;
 		trailHistory.emplace_back(transform);
-		
+
 		if (trailParticle && trailParticle->particleObject) {
-
-			if (auto actor = actorHandle.get()) {
-				if (actor->IsPlayerRef()) {
-					a_deltaTime *= Utils::GetPlayerTimeMultiplier();
-				}
-			}
-			
-			if (!bAppliedTrailColorSettings || bExpired) {
-				if (bExpired) {
-					if (Settings::fTrailFadeOutTime > 0.f) {
-						visibilityPercent = std::fmax(visibilityPercent - (1.f / Settings::fTrailFadeOutTime) * a_deltaTime, 0.f);
-					} else {
-						visibilityPercent = 0.f;
-					}					
+			if (auto particleObject = trailParticle->particleObject) {
+				if (auto actor = actorHandle.get()) {
+					if (actor->IsPlayerRef()) {
+						a_deltaTime *= Utils::GetPlayerTimeMultiplier();
+					}
 				}
 
-				// apply color settings to trail
-				RE::BSVisit::TraverseScenegraphGeometries(trailParticle->particleObject.get(), [&](auto&& a_geometry) -> RE::BSVisit::BSVisitControl {
-					return ApplyColorSettings(std::forward<decltype(a_geometry)>(a_geometry), !bAppliedTrailColorSettings, bExpired);
-				});
+				if (!bAppliedTrailColorSettings || bExpired) {
+					if (bExpired) {
+						if (Settings::fTrailFadeOutTime > 0.f) {
+							visibilityPercent = std::fmax(visibilityPercent - (1.f / Settings::fTrailFadeOutTime) * a_deltaTime, 0.f);
+						} else {
+							visibilityPercent = 0.f;
+						}
+					}
 
-				bAppliedTrailColorSettings = true;
-			}
+					// apply color settings to trail
+					RE::BSVisit::TraverseScenegraphGeometries(particleObject.get(), [&](auto&& a_geometry) -> RE::BSVisit::BSVisitControl {
+						return ApplyColorSettings(std::forward<decltype(a_geometry)>(a_geometry), !bAppliedTrailColorSettings, bExpired);
+					});
 
-			if (auto fadeNode = trailParticle->particleObject->AsFadeNode()) {
-				fadeNode->currentFade = 1.f;
+					bAppliedTrailColorSettings = true;
+				}
 
-				if (fadeNode->children.size() > 0) {
-					auto trailRoot = fadeNode->GetObjectByName("TrailRoot"sv);
-					auto trailRootNode = trailRoot->AsNode();
-					if (trailRootNode && !trailRootNode->children.empty()) {
-						if (trailHistory.size() >= 4) {
-							float segmentsToAdd = 0.f;
-							uint32_t segmentsToAddTrunc = 0;
+				if (auto fadeNode = particleObject->AsFadeNode()) {
+					fadeNode->currentFade = 1.f;
 
-							// calculate how many segments we'll be adding on this update
-							segmentsToAdd = segmentsToAddRemainder + (a_deltaTime * Settings::uTrailSegmentsPerSecond);
-							segmentsToAddTrunc = trunc(segmentsToAdd);
-							segmentsToAddRemainder = segmentsToAdd - segmentsToAddTrunc;	
+					if (fadeNode->children.size() > 0) {
+						auto trailRoot = fadeNode->GetObjectByName("TrailRoot"sv);
+						auto trailRootNode = trailRoot->AsNode();
+						if (trailRootNode && !trailRootNode->children.empty()) {
+							if (trailHistory.size() >= 4) {
+								float segmentsToAdd = 0.f;
+								uint32_t segmentsToAddTrunc = 0;
 
-							// move the tail if expired
-							uint32_t segmentsToMove = 0;
+								// calculate how many segments we'll be adding on this update
+								segmentsToAdd = segmentsToAddRemainder + (a_deltaTime * Settings::uTrailSegmentsPerSecond);
+								segmentsToAddTrunc = trunc(segmentsToAdd);
+								segmentsToAddRemainder = segmentsToAdd - segmentsToAddTrunc;
 
-							for (uint32_t i = 0; i < currentBoneIdx; ++i) {
-								if (segmentTimestamps.size() > i && currentTime + currentTimeOffset > segmentTimestamps[i] + (Settings::fTrailSegmentLifetime * lifetimeMult)) {
-									++segmentsToMove;
-								} else {
-									break;
-								}
-							}
+								// move the tail if expired
+								uint32_t segmentsToMove = 0;
 
-							// check if there's gonna be enough bones left to add new segments, if not - forcibly move the tail, even if it's not expired yet
-							uint32_t totalSegments = currentBoneIdx + segmentsToAddTrunc - segmentsToMove;
-							if (totalSegments >= trailRootNode->children.size()) {
-								segmentsToMove += totalSegments - (trailRootNode->children.size() - 1);
-								uint32_t timestampIdx = segmentTimestamps.size() > segmentsToMove ? segmentsToMove : segmentTimestamps.size() - 1;
-								currentTimeOffset = segmentTimestamps[timestampIdx] + (Settings::fTrailSegmentLifetime * lifetimeMult) - currentTime;
-							}
-
-							if (segmentsToMove > 0) {
-								segmentTimestamps.erase(segmentTimestamps.begin(), segmentTimestamps.begin() + segmentsToMove);
-
-								for (uint32_t i = 0; i < currentBoneIdx; ++i) {
-									if (trailRootNode->children.size() > i + segmentsToMove) {
-										auto& segmentBone = trailRootNode->children[i];
-										auto& segmentToRead = trailRootNode->children[i + segmentsToMove];
-										if (segmentBone && segmentToRead) {
-											segmentBone->local = segmentToRead->local;
-										}
+								for (uint32_t i = 0; i < std::max(currentBoneIdx, static_cast<uint32_t>(segmentTimestamps.size())); ++i) {
+									if (segmentTimestamps.size() > i && currentTime + currentTimeOffset > segmentTimestamps[i] + (Settings::fTrailSegmentLifetime * lifetimeMult)) {
+										++segmentsToMove;
+									} else {
+										break;
 									}
 								}
 
-								currentBoneIdx -= segmentsToMove;
-							}
+								// check if there's gonna be enough bones left to add new segments, if not - forcibly move the tail, even if it's not expired yet
+								uint32_t totalSegments = currentBoneIdx + segmentsToAddTrunc - segmentsToMove;
+								if (totalSegments >= trailRootNode->children.size()) {
+									segmentsToMove += totalSegments - (trailRootNode->children.size() - 1);
+									uint32_t lastTimestamp = segmentTimestamps.size() - 1;
+									uint32_t timestampIdx = std::min(segmentsToMove, lastTimestamp);
+									currentTimeOffset = segmentTimestamps[timestampIdx] + (Settings::fTrailSegmentLifetime * lifetimeMult) - currentTime;
+								}
 
-							// add new segment(s)
-							if (segmentsToAdd > 0.f) {
-								auto p3_it = trailHistory.rbegin();
-								auto p2_it = p3_it + 1;
-								auto p1_it = p2_it + 1;
-								auto p0_it = p1_it + 1;
+								if (segmentsToMove > 0) {
+									segmentTimestamps.erase(segmentTimestamps.begin(), segmentTimestamps.begin() + segmentsToMove);
 
-								auto& p0 = p0_it->translate;
-								auto& p1 = p1_it->translate;
-								auto& p2 = p2_it->translate;
-								auto& p3 = p3_it->translate;
+									for (uint32_t i = 0; i < currentBoneIdx; ++i) {
+										if (trailRootNode->children.size() > i + segmentsToMove) {
+											auto& segmentBone = trailRootNode->children[i];
+											auto& segmentToRead = trailRootNode->children[i + segmentsToMove];
+											if (segmentBone && segmentToRead) {
+												segmentBone->local = segmentToRead->local;
+											}
+										}
+									}
 
-								for (uint32_t i = 0; i < segmentsToAddTrunc; ++i) {
-									if (trailRootNode->children.size() > currentBoneIdx) {
-										auto& segmentBone = trailRootNode->children[currentBoneIdx];
-										if (segmentBone) {
-											float t = (i + 1.f) / segmentsToAdd;
+									currentBoneIdx -= segmentsToMove;
+								}
 
-											RE::NiPoint3 p0end = p0 + (p0_it->rotate * forwardVector) * 50.f;
-											RE::NiPoint3 p1end = p1 + (p1_it->rotate * forwardVector) * 50.f;
-											RE::NiPoint3 p2end = p2 + (p2_it->rotate * forwardVector) * 50.f;
-											RE::NiPoint3 p3end = p3 + (p3_it->rotate * forwardVector) * 50.f;
+								// add new segment(s)
+								if (segmentsToAdd > 0.f) {
+									auto p3_it = trailHistory.rbegin();
+									auto p2_it = p3_it + 1;
+									auto p1_it = p2_it + 1;
+									auto p0_it = p1_it + 1;
 
-											RE::NiPoint3 interpolatedPos = Utils::CatmullRom(p0, p1, p2, p3, t);
-											RE::NiPoint3 interpolatedEnd = Utils::CatmullRom(p0end, p1end, p2end, p3end, t);
+									auto& p0 = p0_it->translate;
+									auto& p1 = p1_it->translate;
+									auto& p2 = p2_it->translate;
+									auto& p3 = p3_it->translate;
 
-											RE::NiPoint3 interpolatedDir = interpolatedEnd - interpolatedPos;
-											interpolatedDir.Unitize();
+									for (uint32_t i = 0; i < segmentsToAddTrunc; ++i) {
+										if (trailRootNode->children.size() > currentBoneIdx) {
+											auto& segmentBone = trailRootNode->children[currentBoneIdx];
+											if (segmentBone) {
+												float t = (i + 1.f) / segmentsToAdd;
 
-											RE::NiTransform newTransform = segmentBone->world;
+												RE::NiPoint3 p0end = p0 + (p0_it->rotate * forwardVector) * 50.f;
+												RE::NiPoint3 p1end = p1 + (p1_it->rotate * forwardVector) * 50.f;
+												RE::NiPoint3 p2end = p2 + (p2_it->rotate * forwardVector) * 50.f;
+												RE::NiPoint3 p3end = p3 + (p3_it->rotate * forwardVector) * 50.f;
 
-											Utils::SetRotationMatrix(newTransform.rotate, -interpolatedDir.x, interpolatedDir.y, interpolatedDir.z);
+												RE::NiPoint3 interpolatedPos = Utils::CatmullRom(p0, p1, p2, p3, t);
+												RE::NiPoint3 interpolatedEnd = Utils::CatmullRom(p0end, p1end, p2end, p3end, t);
 
-											newTransform.rotate = newTransform.rotate * weaponRotation;
-											newTransform.translate = interpolatedPos;
-											newTransform.scale = scale;
+												RE::NiPoint3 interpolatedDir = interpolatedEnd - interpolatedPos;
+												interpolatedDir.Unitize();
 
-											Utils::UpdateNodeTransformLocal(segmentBone.get(), newTransform);
-											segmentBone->world = newTransform;
+												RE::NiTransform newTransform = segmentBone->world;
 
-											segmentTimestamps.emplace_back(currentTime + a_deltaTime * t);
-											++currentBoneIdx;
+												Utils::SetRotationMatrix(newTransform.rotate, -interpolatedDir.x, interpolatedDir.y, interpolatedDir.z);
+
+												newTransform.rotate = newTransform.rotate * weaponRotation;
+												newTransform.translate = interpolatedPos;
+												newTransform.scale = scale;
+
+												Utils::UpdateNodeTransformLocal(segmentBone.get(), newTransform);
+												segmentBone->world = newTransform;
+
+												segmentTimestamps.emplace_back(currentTime + a_deltaTime * t);
+												++currentBoneIdx;
+											}
 										}
 									}
 								}
 							}
-						}
 
-						if (bExpired && (currentBoneIdx == 0 || visibilityPercent == 0.f)) {
-							bActive = false;
-							trailParticle->age += trailParticle->lifetime;
-						}
-
-						// move unused bones to the weapon pos
-						if (trailHistory.size() > 0 && currentBoneIdx < trailRootNode->children.size()) {
-							RE::NiTransform worldTransform = *(trailHistory.rbegin());
-
-							RE::NiPoint3 end = worldTransform.translate + (worldTransform.rotate * forwardVector) * 50.f;
-							RE::NiPoint3 dir = end - worldTransform.translate;
-							dir.Unitize();
-
-							//worldTransform.rotate.SetEulerAnglesXYZ(dir);
-							Utils::SetRotationMatrix(worldTransform.rotate, -dir.x, dir.y, dir.z);
-							worldTransform.rotate = worldTransform.rotate * weaponRotation;
-							worldTransform.scale = scale;
-							
-							RE::NiTransform localTransform = Utils::GetLocalTransform(trailRootNode->children[currentBoneIdx].get(), worldTransform);
-
-							for (uint32_t i = currentBoneIdx; i < trailRootNode->children.size(); ++i) {
-								auto& segmentBone = trailRootNode->children[i];
-								if (segmentBone) {
-									segmentBone->local = localTransform;
-									segmentBone->world = worldTransform;
-									//segmentBone->flags.set(RE::NiAVObject::Flag::kForceUpdate);
-									//segmentBone->lastUpdatedFrameCounter = static_cast<uint32_t>(-1);
-								}
+							if (bExpired && (currentBoneIdx == 0 || visibilityPercent == 0.f)) {
+								bActive = false;
+								trailParticle->age += trailParticle->lifetime;
 							}
 
-							//Settings::g_trueHUD->DrawArrow(worldTransform.translate, end, 10.f, 0.f);
+							// move unused bones to the weapon pos
+							if (trailHistory.size() > 0 && currentBoneIdx < trailRootNode->children.size()) {
+								RE::NiTransform worldTransform = *(trailHistory.rbegin());
+
+								RE::NiPoint3 end = worldTransform.translate + (worldTransform.rotate * forwardVector) * 50.f;
+								RE::NiPoint3 dir = end - worldTransform.translate;
+								dir.Unitize();
+
+								//worldTransform.rotate.SetEulerAnglesXYZ(dir);
+								Utils::SetRotationMatrix(worldTransform.rotate, -dir.x, dir.y, dir.z);
+								worldTransform.rotate = worldTransform.rotate * weaponRotation;
+								worldTransform.scale = scale;
+
+								RE::NiTransform localTransform = Utils::GetLocalTransform(trailRootNode->children[currentBoneIdx].get(), worldTransform);
+
+								for (uint32_t i = currentBoneIdx; i < trailRootNode->children.size(); ++i) {
+									auto& segmentBone = trailRootNode->children[i];
+									if (segmentBone) {
+										segmentBone->local = localTransform;
+										segmentBone->world = worldTransform;
+										//segmentBone->flags.set(RE::NiAVObject::Flag::kForceUpdate);
+										//segmentBone->lastUpdatedFrameCounter = static_cast<uint32_t>(-1);
+									}
+								}
+
+								//Settings::g_trueHUD->DrawArrow(worldTransform.translate, end, 10.f, 0.f);
+							}
 						}
 					}
 				}
@@ -277,9 +278,13 @@ void AttackTrail::Update(float a_deltaTime)
 				fadeNode->currentFade = 1.f;
 			}
 		}*/
-		
+
 		currentTime += a_deltaTime;
+
+		return true;
 	}
+
+	return false;
 }
 
 bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::InventoryEntryData* a_item, bool a_bIsLeftHand, TrailDefinition& a_outTrailDefinition) const
@@ -313,7 +318,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 				return false;
 			}
 		}
-		
+
 		// check enchantment
 		if (a_trailDefinition.enchantmentNames || a_trailDefinition.effectNames || a_trailDefinition.effectKeywords || a_trailDefinition.effectShaders) {
 			if (!a_actorHandle) {
@@ -336,7 +341,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			if (!magicItem) {
 				return false;
 			}
-			
+
 			// check enchantment names
 			if (a_trailDefinition.enchantmentNames) {
 				if (auto fullNameForm = magicItem->As<RE::TESFullName>()) {
@@ -378,7 +383,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 									return false;
 								}
 							}
-							
+
 							// check effect keywords
 							if (a_trailDefinition.effectKeywords) {
 								for (auto& keyword : *a_trailDefinition.effectKeywords) {
@@ -407,7 +412,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 		a_outTrailDefinition = *searchAll;
 		return true;
 	}
-	
+
 	// search in the ANY trail list - in this case ANY of the conditions has to be met
 	auto searchAny = std::find_if(Settings::trailDefinitionsAny.begin(), Settings::trailDefinitionsAny.end(), [&](const TrailDefinition& a_trailDefinition) {
 		// check weapon names
@@ -472,12 +477,11 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 			if (actorValueForCost != RE::ActorValue::kNone) {
 				auto cost = magicItem->CalculateMagickaCost(actor.get());
 				if (actor->AsActorValueOwner()->GetActorValue(actorValueForCost) >= cost) {  // enchantment can be applied
-
 					auto checkEffect = [&](RE::Effect* a_effect) {
 						if (!a_effect) {
 							return false;
 						}
-						
+
 						if (a_effect->baseEffect) {
 							// check effect names
 							if (a_trailDefinition.effectNames) {
@@ -509,7 +513,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 
 						return false;
 					};
-					
+
 					if (auto effect = magicItem->GetCostliestEffectItem()) {
 						if (checkEffect(effect)) {
 							return true;
@@ -525,7 +529,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 				}
 			}
 		}
-		
+
 		// passed none of the conditions
 		return false;
 	});
@@ -553,7 +557,7 @@ RE::BSVisit::BSVisitControl AttackTrail::ApplyColorSettings(RE::BSGeometry* a_ge
 					// delete it because SetMaterial copies it
 					newMaterial->~BSEffectShaderMaterial();
 					RE::free(newMaterial);
-					
+
 					effectShaderMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShader->material);
 
 					if (baseColorOverride) {
@@ -570,9 +574,9 @@ RE::BSVisit::BSVisitControl AttackTrail::ApplyColorSettings(RE::BSGeometry* a_ge
 					}
 
 					effectShaderMaterial->baseColorScale *= Settings::fTrailBaseColorScaleMult;
-				}				
-			}			
-			
+				}
+			}
+
 			if (a_bExpired) {  // fade out alpha
 				if (!originalTrailAlpha) {
 					originalTrailAlpha = effectShaderMaterial->baseColor.alpha;
@@ -583,6 +587,6 @@ RE::BSVisit::BSVisitControl AttackTrail::ApplyColorSettings(RE::BSGeometry* a_ge
 			//return RE::BSVisit::BSVisitControl::kStop;
 		}
 	}
-	
+
 	return RE::BSVisit::BSVisitControl::kContinue;
 }

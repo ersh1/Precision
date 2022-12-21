@@ -58,7 +58,7 @@ bool Render::Shader::Compile(const std::string& source, const std::string& entry
 
 	auto versionStr = stage == PipelineStage::Vertex ?
 	                      std::string("vs_").append(version) :
-                          std::string("ps_").append(version);
+	                      std::string("ps_").append(version);
 
 	auto result = D3DCompile(
 		source.c_str(), source.length(), nullptr, nullptr, nullptr,

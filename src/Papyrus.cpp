@@ -1,7 +1,7 @@
 #include "Papyrus.h"
 
-#include "Settings.h"
 #include "PrecisionHandler.h"
+#include "Settings.h"
 
 namespace Papyrus
 {
@@ -17,7 +17,6 @@ namespace Papyrus
 		logger::info("Registered Precision_MCM class");
 		return true;
 	}
-
 
 	bool Precision_Utility::IsActorActive(RE::StaticFunctionTag*, RE::Actor* a_actor)
 	{
@@ -45,7 +44,6 @@ namespace Papyrus
 		logger::info("Registered Precision_Utility class");
 		return true;
 	}
-
 
 	void Register()
 	{

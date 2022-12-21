@@ -2,6 +2,7 @@
 
 #include "Havok/ActiveRagdoll.h"
 #include "Offsets.h"
+#include "Utils.h"
 
 Blender::Curve::Curve(float a_duration) :
 	duration(a_duration)
@@ -29,7 +30,7 @@ float Blender::PowerCurve::GetBlendValueAtTime(float a_time)
 	return std::clamp(a * pow(a_time, b), 0.f, 1.f);
 }
 
-void Blender::StartBlend(BlendType a_blendType, const Curve& a_blendCurve)
+void Blender::StartBlend(BlendType a_blendType, const Curve& a_blendCurve, bool a_bIgnoreRoot /*= false*/)
 {
 	if (bIsActive) {
 		// We were already blending before, so set the initial pose to the current blend pose
@@ -42,6 +43,7 @@ void Blender::StartBlend(BlendType a_blendType, const Curve& a_blendCurve)
 	elapsedTime = 0.f;
 	type = a_blendType;
 	curve = a_blendCurve;
+	bIgnoreRoot = a_bIgnoreRoot;
 	bIsActive = true;
 }
 
@@ -70,9 +72,17 @@ bool Blender::Update(const struct ActiveRagdoll& a_ragdoll, [[maybe_unused]] con
 		}
 		bIsFirstBlendFrame = false;
 
+		RE::hkQsTransform rootTransform;
+		int animRootIndex = -1;
+		if (bIgnoreRoot) {
+			animRootIndex = Utils::GetAnimBoneIndexFromRagdollBoneIndex(a_driver, 0);
+			if (animRootIndex != -1) {
+				rootTransform = poseOut[animRootIndex];
+			}
+		}
+
 		// Blend poses
-		switch (type)
-		{
+		switch (type) {
 		case BlendType::kAnimToRagdoll:
 			{
 				uint32_t num = std::min(static_cast<uint32_t>(initialPose.size()), static_cast<uint32_t>(a_ragdoll.ragdollPose.size()));

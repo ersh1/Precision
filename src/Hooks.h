@@ -3,6 +3,27 @@
 #include "PrecisionAPI.h"
 #include "PrecisionHandler.h"
 
+namespace RE
+{
+	struct RE::BSAnimationUpdateData
+	{
+		float deltaTime;                            // 00
+		uint32_t pad04;                             // 04
+		void* unkFunctionPtr;                       // 08
+		TESObjectREFR* refr;                        // 10
+		NiPoint3* worldCameraPositionPtr;           // 18
+		IPostAnimationChannelUpdateFunctor* unk20;  // 20
+		uint16_t flags;                             // 28
+		bool unk2A;                                 // 2A
+		bool unk2B;                                 // 2B
+		bool unk2C;                                 // 2C
+		bool unk2D;                                 // 2D
+		bool unk2E;                                 // 2E
+		bool unk2F;                                 // 2F
+	};
+	static_assert(sizeof(BSAnimationUpdateData) == 0x30);
+}
+
 namespace Hooks
 {
 	class UpdateHooks
@@ -15,27 +36,33 @@ namespace Hooks
 			REL::Relocation<uintptr_t> hook3{ RELOCATION_ID(36359, 37350) };  // 5D8170, 5FCF20, UpdateMovementJob internal function
 
 			auto& trampoline = SKSE::GetTrampoline();
-			_Nullsub = trampoline.write_call<5>(hook1.address() + RELOCATION_OFFSET(0x748, 0xC26), Nullsub);                                // 5B3738, 5DAB76
-			_UpdateAnimationInternal = trampoline.write_call<5>(hook2.address() + RELOCATION_OFFSET(0x74, 0x74), UpdateAnimationInternal);  // 6E1A04, 70A8B4
-			_ApplyMovement = trampoline.write_call<5>(hook3.address() + RELOCATION_OFFSET(0xF0, 0xFB), ApplyMovement);                      // 5D8260, 5FD01B
+			_Nullsub = trampoline.write_call<5>(hook1.address() + RELOCATION_OFFSET(0x748, 0xC26), Nullsub);            // 5B3738, 5DAB76
+			_ApplyMovement = trampoline.write_call<5>(hook3.address() + RELOCATION_OFFSET(0xF0, 0xFB), ApplyMovement);  // 5D8260, 5FD01B
+
+			REL::Relocation<std::uintptr_t> CharacterVtbl{ RE::VTABLE_Character[0] };
+			_Character_ModifyAnimationUpdateData = CharacterVtbl.write_vfunc(0x79, Character_ModifyAnimationUpdateData);
 
 			REL::Relocation<std::uintptr_t> PlayerCharacterVtbl{ RE::VTABLE_PlayerCharacter[0] };
-			_PlayerCharacter_UpdateAnimation = PlayerCharacterVtbl.write_vfunc(0x7D, PlayerCharacter_UpdateAnimation);
+			_PlayerCharacter_ModifyAnimationUpdateData = PlayerCharacterVtbl.write_vfunc(0x79, PlayerCharacter_ModifyAnimationUpdateData);
 		}
 
 	private:
 		static void Nullsub();
-		static void UpdateAnimationInternal(RE::Actor* a_this, float a_deltaTime);
 		static void ApplyMovement(RE::Actor* a_this, float a_deltaTime);
 
-		static bool ShouldSetPitchModifier(RE::Actor* a_this);
+		static void Character_ModifyAnimationUpdateData(RE::Character* a_this, RE::BSAnimationUpdateData& a_data);
+		static void PlayerCharacter_ModifyAnimationUpdateData(RE::PlayerCharacter* a_this, RE::BSAnimationUpdateData& a_data);
 
 		static inline REL::Relocation<decltype(Nullsub)> _Nullsub;
-		static inline REL::Relocation<decltype(UpdateAnimationInternal)> _UpdateAnimationInternal;
 		static inline REL::Relocation<decltype(ApplyMovement)> _ApplyMovement;
 
-		static void PlayerCharacter_UpdateAnimation(RE::PlayerCharacter* a_this, float a_deltaTime);
-		static inline REL::Relocation<decltype(PlayerCharacter_UpdateAnimation)> _PlayerCharacter_UpdateAnimation;
+		static inline REL::Relocation<decltype(Character_ModifyAnimationUpdateData)> _Character_ModifyAnimationUpdateData;
+		static inline REL::Relocation<decltype(PlayerCharacter_ModifyAnimationUpdateData)> _PlayerCharacter_ModifyAnimationUpdateData;
+
+		static bool ShouldSetPitchModifier(RE::Actor* a_this);
+		static void ModifyAnimationUpdateData(RE::Actor* a_this, RE::BSAnimationUpdateData& a_data);
+
+		static RE::Actor* GetActorFromRbx();
 	};
 
 	class AttackHooks
@@ -66,7 +93,7 @@ namespace Hooks
 			_HitData_GetWeaponDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x1A5, 0x1A4), HitData_GetWeaponDamage);    // 7429F5, 76EF54
 			_HitData_GetBashDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x22F, 0x226), HitData_GetBashDamage);        // 742A7F, 76EFD6
 			_HitData_GetUnarmedDamage = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x26A, 0x24D), HitData_GetUnarmedDamage);  // 742ABA, 76EFFD
-			//_HitData_GetStagger = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x2FC, 0x2D7), HitData_GetStagger);              // 742B4C, 76F087
+																																				//_HitData_GetStagger = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x2FC, 0x2D7), HitData_GetStagger);              // 742B4C, 76F087
 		}
 
 	private:
@@ -202,7 +229,7 @@ namespace Hooks
 			REL::Relocation<std::uintptr_t> PlayerCharacterVtbl{ RE::VTABLE_PlayerCharacter[0] };
 			//_PlayerCharacter_DetachHavok = PlayerCharacterVtbl.write_vfunc(0x65, PlayerCharacter_DetachHavok);
 			//_PlayerCharacter_InitHavok = PlayerCharacterVtbl.write_vfunc(0x66, PlayerCharacter_InitHavok);
-			
+
 			REL::Relocation<std::uintptr_t> ChairFurnitureExitHandlerVtbl{ RE::VTABLE_ChairFurnitureExitHandler[0] };
 
 			REL::Relocation<std::uintptr_t> BShkbAnimationGraphVtbl{ RE::VTABLE_BShkbAnimationGraph[0] };
@@ -213,7 +240,7 @@ namespace Hooks
 			REL::Relocation<uintptr_t> hook3{ RELOCATION_ID(62621, 63562) };  // AEB8F0, B10A30, BShkbAnimationGraph::sub_140AEB8F0
 			REL::Relocation<uintptr_t> hook4{ RELOCATION_ID(62622, 63563) };  // AEBBF0, B10D30, BShkbAnimationGraph::sub_140AEBBF0
 			REL::Relocation<uintptr_t> hook5{ RELOCATION_ID(62642, 63587) };  // AEF630, B14F90, BShkbAnimationGraph::sub_140AEF630
-			
+
 			REL::Relocation<uintptr_t> hook6{ RELOCATION_ID(41805, 42886) };  // 723070, 74E1E0, EnableCharacterBumperHandler::Handle
 
 			REL::Relocation<uintptr_t> collisionFilterHook1{ RELOCATION_ID(76181, 78009) };  // DAF370, DEF410, hkpRigidBody
@@ -231,7 +258,7 @@ namespace Hooks
 			_hkbRagdollDriver_DriveToPose = trampoline.write_call<5>(hook3.address() + RELOCATION_OFFSET(0x25B, 0x256), hkbRagdollDriver_DriveToPose);  // AEBB4B, B10C86
 			_hkbRagdollDriver_PostPhysics = trampoline.write_call<5>(hook4.address() + RELOCATION_OFFSET(0x18C, 0x18B), hkbRagdollDriver_PostPhysics);  // AEBD7C, B10EBB
 
-			_BShkbAnimationGraph_ShouldAddToGraphListeners = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x37F, 0x38D), BShkbAnimationGraph_ShouldAddToGraphListeners);  // AEF9AF, B1531D
+			//_BShkbAnimationGraph_ShouldAddToGraphListeners = trampoline.write_call<5>(hook5.address() + RELOCATION_OFFSET(0x37F, 0x38D), BShkbAnimationGraph_ShouldAddToGraphListeners);  // AEF9AF, B1531D
 
 			_QueueTask_ToggleCharacterBumper = trampoline.write_call<5>(hook6.address() + RELOCATION_OFFSET(0x1F, 0x1F), QueueTask_ToggleCharacterBumper);
 			_ToggleCharacterBumper = trampoline.write_call<5>(hook6.address() + RELOCATION_OFFSET(0x56, 0x56), ToggleCharacterBumper);
@@ -284,12 +311,12 @@ namespace Hooks
 		static bool AddSkeletonToWorld(RE::ActorHandle a_actorHandle);
 		static bool RemoveSkeletonFromWorld(RE::ActorHandle a_actorHandle);
 
-		static bool IsRagdollAddedToWorld(RE::ActorHandle a_actorHandle);		
+		static bool IsRagdollAddedToWorld(RE::ActorHandle a_actorHandle);
 		static bool AddRagdollToWorld(RE::ActorHandle a_actorHandle);
 		static bool RemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
 		static bool ShouldRemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
 		static bool CanRemoveRagdollFromWorld(RE::ActorHandle a_actorHandle);
-		
+
 		static void ModifyConstraints(RE::Actor* a_actor);
 		static void DisableSyncOnUpdate(RE::Actor* a_actor);
 
@@ -301,6 +328,7 @@ namespace Hooks
 		static void PostDriveToPose(RE::hkbRagdollDriver* a_driver, float a_deltaTime, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorOutput);
 		static void PrePostPhysics(RE::hkbRagdollDriver* a_driver, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorInOut);
 		static void PostPostPhysics(RE::hkbRagdollDriver* a_driver, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorInOut);
+		static void PostPostPostPhysics(RE::hkbRagdollDriver* a_driver);
 		static void PrePhysicsStep(RE::bhkWorld* a_world);
 
 		static void TryForceRigidBodyControls(RE::hkbGeneratorOutput& a_generatorOutput, RE::hkbGeneratorOutput::TrackHeader& a_header);
@@ -313,14 +341,14 @@ namespace Hooks
 		static bool CloneSkeleton(RE::ActorHandle a_actorHandle);
 
 		static inline REL::Relocation<decltype(CullActors)> _CullActors;
-		
+
 		static inline REL::Relocation<decltype(SetWorld)> _SetWorld;
 
 		static inline REL::Relocation<decltype(ProcessHavokHitJobs)> _ProcessHavokHitJobs;
 		static inline REL::Relocation<decltype(BShkbAnimationGraph_UpdateAnimation)> _BShkbAnimationGraph_UpdateAnimation;
 		static inline REL::Relocation<decltype(hkbRagdollDriver_DriveToPose)> _hkbRagdollDriver_DriveToPose;
 		static inline REL::Relocation<decltype(hkbRagdollDriver_PostPhysics)> _hkbRagdollDriver_PostPhysics;
-		
+
 		static inline REL::Relocation<decltype(BShkbAnimationGraph_ShouldAddToGraphListeners)> _BShkbAnimationGraph_ShouldAddToGraphListeners;
 
 		static inline REL::Relocation<decltype(QueueTask_ToggleCharacterBumper)> _QueueTask_ToggleCharacterBumper;

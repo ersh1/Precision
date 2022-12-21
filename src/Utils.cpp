@@ -135,7 +135,7 @@ namespace Utils
 
 		return result;
 	}
-	
+
 	RE::NiQuaternion slerp(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB, double a_t)
 	{
 		// quaternion to return
@@ -183,7 +183,7 @@ namespace Utils
 		result.x = (a_quatA.x * ratioA + q2.x * ratioB);
 		result.y = (a_quatA.y * ratioA + q2.y * ratioB);
 		result.z = (a_quatA.z * ratioA + q2.z * ratioB);
-		
+
 		return result;
 	}
 
@@ -290,7 +290,6 @@ namespace Utils
 	{
 		Capsule capsule;
 		if (GetCapsuleParams(a_node, capsule)) {
-
 			if (a_node && a_node->collisionObject) {
 				auto collisionObject = static_cast<RE::bhkCollisionObject*>(a_node->collisionObject.get());
 				auto rigidBody = collisionObject->GetRigidBody();
@@ -307,30 +306,49 @@ namespace Utils
 
 					DrawHandler::DrawDebugCapsule(vertexA, vertexB, capsule.radius, a_duration, a_color, true);
 				}
-			}		
+			}
 		}
 	}
 
-	void DrawActorColliders(RE::Actor* a_actor, float a_duration, glm::vec4 a_color)
+	void DrawActorColliders(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_root, float a_duration, glm::vec4 a_color)
 	{
-		if (!a_actor) {
+		if (!a_actorHandle) {
 			return;
 		}
 
-		auto node = a_actor->Get3D();
+		auto actor = a_actorHandle.get();
 
-		DrawColliders(node, a_duration, a_color);
+		bool bIsGhost = actor->IsGhost();
+		bool bCheckJumpIframes = false;
+
+		constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+
+		if (bIsGhost) {
+			a_color = blue;
+		} else if (PrecisionHandler::HasJumpIframes(actor.get())) {
+			bCheckJumpIframes = true;
+		}
+
+		DrawColliders(a_root, a_duration, a_color, bCheckJumpIframes);
 	}
 
-	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color)
+	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color, bool a_bCheckJumpIframes /*= false*/)
 	{
 		if (a_node) {
-			DrawCollider(a_node, a_duration, a_color);
+			glm::vec4 nodeColor = a_color;
+			if (a_bCheckJumpIframes) {
+				if (!Utils::IsNodeOrChildOfNode(a_node, Settings::jumpIframeNode)) {
+					constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+					nodeColor = blue;
+				}
+			}
+
+			DrawCollider(a_node, a_duration, nodeColor);
 
 			auto node = a_node->AsNode();
 			if (node) {
 				for (auto& child : node->children) {
-					DrawColliders(child.get(), a_duration, a_color);
+					DrawColliders(child.get(), a_duration, a_color, a_bCheckJumpIframes);
 				}
 			}
 		}
@@ -510,6 +528,25 @@ namespace Utils
 		return -1;
 	}
 
+	int GetAnimBoneIndexFromRagdollBoneIndex(const RE::hkbRagdollDriver& a_driver, int a_ragdollBoneIndex)
+	{
+		if (auto character = a_driver.character) {
+			if (auto& setup = character->setup) {
+				if (auto& animationSkeleton = setup->animationSkeleton) {
+					if (auto& ragdollToAnimationmapper = setup->ragdollToAnimationSkeletonMapper) {
+						for (auto& mapping : ragdollToAnimationmapper->mapping.simpleMappings) {
+							if (mapping.boneA == a_ragdollBoneIndex) {
+								return mapping.boneB;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return -1;
+	}
+
 	bool IsPlayerTeammateOrSummon(RE::Actor* a_actor)
 	{
 		if (a_actor) {
@@ -539,7 +576,7 @@ namespace Utils
 			ApplyPerkEntryPoint(RE::BGSEntryPointPerkEntry::EntryPoint::kSetSweepAttack, actor.get(), object, ret);
 			return ret != 0.f;
 		}
-		
+
 		return false;
 	}
 
@@ -700,7 +737,7 @@ namespace Utils
 
 		if (a_object->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 			return;
-		}		
+		}
 
 		// Skip billboards and their children
 		if (a_object->GetRTTI() == (RE::NiRTTI*)RE::NiRTTI_NiBillboardNode.address()) {
@@ -715,13 +752,13 @@ namespace Utils
 				}
 			}
 
-			// Skip particles 
+			// Skip particles
 			auto& type = geom->GetType();
 			if (type == RE::BSGeometry::Type::kParticles || type == RE::BSGeometry::Type::kStripParticles) {
 				return;
 			}
 
-			// Skip anything that does not write into zbuffer 
+			// Skip anything that does not write into zbuffer
 			const auto effect = geom->properties[RE::BSGeometry::States::kEffect];
 			if (a_bStrict) {
 				const auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect.get());
@@ -736,7 +773,7 @@ namespace Utils
 
 			return a_func(geom, a_transform);
 		}
-		
+
 		auto node = a_object->AsNode();
 		if (node) {
 			RE::NiTransform transform = a_transform * node->local;
@@ -750,7 +787,7 @@ namespace Utils
 	{
 		RE::NiBound ret{};
 		bool bInitial = true;
-		
+
 		RE::NiTransform transform{};
 		TraverseMeshes(a_obj, true, transform, [&](auto&& a_geometry, const RE::NiTransform& a_transform) {
 			RE::NiBound modelBound = a_geometry->modelBound;
@@ -924,7 +961,7 @@ namespace Utils
 	{
 		RE::BSAnimationGraphManagerPtr animGraphManager = nullptr;
 		a_actor->GetAnimationGraphManager(animGraphManager);
-		
+
 		if (animGraphManager) {
 			RE::BSSpinLockGuard animGraphLocker(animGraphManager->GetRuntimeData().updateLock);
 
@@ -934,7 +971,7 @@ namespace Utils
 
 			for (auto& graph : animGraphManager->graphs) {
 				graph->SetWorld(a_world);
-			}			
+			}
 		}
 	}
 
@@ -957,7 +994,7 @@ namespace Utils
 	RE::MATERIAL_ID GetHitMaterialID(RE::hkpRigidBody* a_hitRigidBody, const RE::hkpContactPointEvent& a_event, int a_hitBodyIdx)
 	{
 		RE::MATERIAL_ID result = RE::MATERIAL_ID::kNone;
-		
+
 		if (auto shape = a_hitRigidBody->GetShape()) {
 			auto bhkShape = reinterpret_cast<RE::bhkShape*>(shape->userData);
 			result = bhkShape->materialID;
@@ -1017,5 +1054,4 @@ namespace Utils
 
 		return RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
 	}
-
 }

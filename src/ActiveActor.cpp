@@ -1,6 +1,6 @@
 #include "ActiveActor.h"
 
-#include "Offsets.h" 
+#include "Offsets.h"
 #include "PrecisionHandler.h"
 #include "Utils.h"
 
@@ -27,11 +27,11 @@ ActiveActor::ActiveActor(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_root, 
 
 ActiveActor::~ActiveActor()
 {
-	 // Remove from active collision groups
-	 WriteLocker locker(PrecisionHandler::activeCollisionGroupsLock);
+	// Remove from active collision groups
+	WriteLocker locker(PrecisionHandler::activeCollisionGroupsLock);
 
-	 PrecisionHandler::activeCollisionGroups.erase(collisionGroup);
- }
+	PrecisionHandler::activeCollisionGroups.erase(collisionGroup);
+}
 
 void ActiveActor::Update(float a_deltaTime)
 {
@@ -46,23 +46,22 @@ void ActiveActor::Update(float a_deltaTime)
 		if (receivedHitstopCooldown <= 0.f) {
 			receivedHitstopCount = 0;
 			receivedHitstopCooldown = 0.f;
-		}		
+		}
 	}
 
 	if (Settings::bDebug && Settings::bDisplaySkeletonColliders) {
 		glm::vec4 color{ 1.f, 0.5f, 0.f, 1.f };
-		Utils::DrawColliders(clone.get(), 0.f, color);
+		Utils::DrawActorColliders(actorHandle, clone.get(), 0.f, color);
 	}
 }
 
 bool ActiveActor::UpdateClone()
 {
 	auto actor = actorHandle.get();
-	if (!actor)
-	{
+	if (!actor) {
 		return false;
 	}
-	
+
 	// Early out if the actor's root node has changed (e.g. post-racemenu)
 	auto currentRoot = actor->Get3D(false);
 	if (currentRoot != root.get()) {
@@ -74,7 +73,7 @@ bool ActiveActor::UpdateClone()
 	if (currentScale != actorScale) {
 		return false;
 	}
-	
+
 	// Check whether the collision group is still correct
 	bool bCollisionGroupChanged = false;
 
@@ -100,12 +99,12 @@ bool ActiveActor::UpdateClone()
 
 		bCollisionGroupChanged = true;
 	}
-	
+
 	// Copy local transforms of respective bones from original to clone
 	for (auto& entry : cloneToOriginalMap) {
 		auto cloneNode = entry.first;
 		auto originalNode = entry.second;
-		
+
 		cloneNode->local = originalNode->local;
 
 		// Update collision group if changed
@@ -113,7 +112,7 @@ bool ActiveActor::UpdateClone()
 			if (auto collidable = static_cast<RE::bhkCollisionObject*>(cloneNode->collisionObject.get())) {
 				if (auto worldObject = collidable->body.get()) {
 					if (auto hkpWorldObject = static_cast<RE::hkpWorldObject*>(worldObject->referencedObject.get())) {
-						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo &= (0x0000ffff);  // zero out collision group
+						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo &= (0x0000ffff);                                   // zero out collision group
 						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo |= (static_cast<uint32_t>(collisionGroup) << 16);  // set collision group to current
 					}
 				}
@@ -123,7 +122,7 @@ bool ActiveActor::UpdateClone()
 
 	// Update the clone's local transform location to match the original's world transform location
 	Utils::UpdateNodeTransformLocal(clone.get(), root->world);
-	
+
 	// Run the game's update function on the clone
 	RE::NiUpdateData updateData;
 	auto flags = reinterpret_cast<uint32_t*>(&updateData.flags);
@@ -187,7 +186,7 @@ void ActiveActor::AddHitstop(float a_hitstopLength, bool a_bReceived)
 	if (a_bReceived) {
 		float diminishingReturnsMultiplier = pow(Settings::fHitstopDurationDiminishingReturnsFactor, receivedHitstopCount);
 		a_hitstopLength *= diminishingReturnsMultiplier;
-		
+
 		++receivedHitstopCount;
 		receivedHitstopCooldown = Settings::fReceivedHitstopCooldown;
 	}
@@ -257,9 +256,9 @@ void ActiveActor::FillCloneMap(RE::NiAVObject* a_clone, RE::NiAVObject* a_origin
 				// remove nodes that are dead ends
 				if (IsNodeDeadEnd(cloneChild.get())) {
 					cloned->DetachChild(cloneChild.get());
-					
+
 					continue;
-				}				
+				}
 
 				// Check collision layers
 				if (auto collidable = static_cast<RE::bhkCollisionObject*>(cloneChild->collisionObject.get())) {
@@ -271,12 +270,12 @@ void ActiveActor::FillCloneMap(RE::NiAVObject* a_clone, RE::NiAVObject* a_origin
 							// remove children that have the char controller layer
 							if (layer == CollisionLayer::kCharController) {
 								cloned->DetachChild(cloneChild.get());
-								
+
 								continue;
 							}
-							
+
 							// set collision layer
-							collisionFilterInfo &= ~0x7F; // zero out collision layer
+							collisionFilterInfo &= ~0x7F;  // zero out collision layer
 							collisionFilterInfo |= static_cast<uint32_t>(collisionLayer);
 						}
 					}

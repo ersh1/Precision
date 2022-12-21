@@ -225,6 +225,48 @@ namespace RE
 		hkArray<struct LocalFrameOnBone> localFrames;
 	};
 
+	class hkaSkeletonMapperData
+	{
+	public:
+		enum MappingType
+		{
+			kRagdollMapping = 0,
+			kRetargetingMapping = 1
+		};
+
+		struct SimpleMapping
+		{
+			int16_t boneA;
+			int16_t boneB;
+			hkQsTransform aFromBTransform;
+		};
+
+		struct ChainMapping
+		{
+			int16_t startBoneA;
+			int16_t endBoneA;
+			int16_t startBoneB;
+			int16_t endBoneB;
+			hkQsTransform startAFromBTransform;
+			hkQsTransform endAFromBTransform;
+		};
+
+		hkRefPtr<hkaSkeleton> skeletonA;
+		hkRefPtr<hkaSkeleton> skeletonB;
+		hkArray<SimpleMapping> simpleMappings;
+		hkArray<ChainMapping> chainMappings;
+		hkArray<int16_t> unmappedBones;
+		hkQsTransform extractedMotionMapping;
+		bool keepUnmappedLocal;
+		stl::enumeration<hkaSkeletonMapperData::MappingType, int32_t> mappingType;
+	};
+
+	class hkaSkeletonMapper : public hkReferencedObject
+	{
+	public:
+		hkaSkeletonMapperData mapping;
+	};
+
 	struct BShkbAnimationGraph_UpdateData
 	{
 		float deltaTime;                            // 00
@@ -502,7 +544,7 @@ namespace RE
 		inline static auto Ni_RTTI = NiRTTI_bhkBlendCollisionObject;
 
 		~bhkBlendCollisionObject() override;  // 00
-		
+
 		float blendStrength;               // 28 - this affects how intensely to go from rigidBody position to node position. 0 means strictly follow rigidbody, 1 means strictly follow node.
 		float unk2C;                       // 2C
 		hkpMotion::MotionType motionType;  // 30

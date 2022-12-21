@@ -67,7 +67,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 {
 	a_info->infoVersion = SKSE::PluginInfo::kVersion;
 	a_info->name = Plugin::NAME.data();
-	a_info->version = Plugin::VERSION[0];
+	a_info->version = Plugin::VERSION.pack();
 
 	if (a_skse->IsEditor()) {
 		logger::critical("Loaded in editor, marking as incompatible"sv);
@@ -99,7 +99,9 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
 {
 #ifndef NDEBUG
-	while (!IsDebuggerPresent()) { Sleep(100); }
+	while (!IsDebuggerPresent()) {
+		Sleep(100);
+	}
 #endif
 	REL::Module::reset();  // Clib-NG bug workaround
 
@@ -122,6 +124,18 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 
 extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::InterfaceVersion a_interfaceVersion)
 {
+	// Workaround so the old version of Accuracy doesn't receive the API. Should've designed the API a bit differently. Too late now.
+	HMODULE hModule = nullptr;
+	void* retAddr = _ReturnAddress();
+	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)retAddr, &hModule);
+
+	if (hModule) {
+		SKSE::PluginVersionData* versionData = (SKSE::PluginVersionData*)SKSE::WinAPI::GetProcAddress(hModule, "SKSEPlugin_Version");
+		if (versionData && versionData->pluginName == "Accuracy"sv && versionData->pluginVersion < 0x20000) {
+			return nullptr;
+		}
+	}
+
 	auto api = Messaging::PrecisionInterface::GetSingleton();
 
 	logger::info("Precision::RequestPluginAPI called, InterfaceVersion {}", a_interfaceVersion);

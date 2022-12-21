@@ -52,10 +52,10 @@ struct AttackCollision
 
 private:
 	mutable Lock hitMaterialsLock;
-	
+
 	bool CreateCollision(RE::bhkWorld* a_world, RE::Actor* a_actor, RE::NiNode* a_parentNode, RE::NiNode* a_newNode, RE::hkVector4& a_vertexA, RE::hkVector4& a_vertexB, float a_radius, CollisionLayer a_collisionLayer);
-	bool RemoveCollision(RE::NiPointer<RE::NiNode>& a_node);	
-	
+	bool RemoveCollision(RE::NiPointer<RE::NiNode>& a_node);
+
 	HitRefs _hitRefs{};
 	std::unordered_map<RE::MATERIAL_ID, float> _hitMaterials;
 };
@@ -94,13 +94,12 @@ struct AttackCollisions
 	std::optional<uint32_t> ignoreVanillaAttackEvents = std::nullopt;
 	bool bStartedWithWeaponSwing = false;
 	bool bStartedWithWPNSwingUnarmed = false;
-	
 
 private:
 	mutable Lock lock;
 
 	std::vector<std::shared_ptr<AttackCollision>> _attackCollisions{};
-	
+
 	// Hit refs shared by collisions with assigned IDs
 	std::unordered_map<uint8_t, HitRefs> _IDHitRefs{};
 };

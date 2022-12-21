@@ -298,9 +298,9 @@ void PendingHit::Run()
 
 				if (!bIsInRagdollState || bIsDead) {  // don't apply impulse to ragdolled alive targets because they won't be able to get up when regularly hit
 					bool bIsActiveRagdoll = !bIsDead && !bJustKilled;
-					
+
 					auto targetHandle = targetActor->GetHandle();
-					
+
 					bool bAttackerIsPlayer = attacker->IsPlayerRef();
 					precisionHandler->ApplyHitImpulse(targetHandle, originalHitRigidBody, niHitVelocity, contactPoint.position, impulseMult, bIsActiveRagdoll, bAttackerIsPlayer, false);
 				}
@@ -313,7 +313,7 @@ void PendingHit::Run()
 			auto node = RE::NiPointer<RE::NiAVObject>(GetNiObjectFromCollidable(hitRigidBody->GetCollidable()));
 			DrawHandler::AddCollider(node, 1.f, green);
 		}
-		
+
 		// run post hit callbacks
 		if (precisionHandler->postHitCallbacks.size() > 0) {
 			precisionHandler->RunPostHitCallbacks(precisionHitData, hitData);
@@ -332,7 +332,7 @@ void PendingHit::RunFXOnly()
 
 	RE::hkpRigidBody* hitRigidBody = static_cast<RE::hkpRigidBody*>(hitRigidBodyWrapper->referencedObject.get());
 	RE::hkpRigidBody* hittingRigidBody = static_cast<RE::hkpRigidBody*>(hittingRigidBodyWrapper->referencedObject.get());
-	
+
 	// create an artificial hkpCdPoint to insert into the point collector
 	RE::hkpCdPoint cdPoint;
 	cdPoint.contact = contactPoint;

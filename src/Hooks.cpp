@@ -43,18 +43,22 @@ namespace Hooks
 		DrawHandler::GetSingleton()->Update(*g_deltaTime);
 	}
 
-	void UpdateHooks::UpdateAnimationInternal(RE::Actor* a_this, float a_deltaTime)
+	void UpdateHooks::ApplyMovement(RE::Actor* a_this, float a_deltaTime)
 	{
 		if (Settings::bEnableHitstop) {
-			auto actorHandle = a_this->GetHandle();
-			float mult = PrecisionHandler::GetHitstopMultiplier(actorHandle, a_deltaTime);
-			PrecisionHandler::UpdateHitstop(actorHandle, a_deltaTime);
-			a_deltaTime *= mult;
+			a_deltaTime *= PrecisionHandler::GetHitstopMultiplier(a_this->GetHandle(), a_deltaTime);
 		}
 
-		// set pitch for upper body modifier, don't use vanilla pitch because it's weird				
+		_ApplyMovement(a_this, a_deltaTime);
+	}
+
+	void UpdateHooks::Character_ModifyAnimationUpdateData(RE::Character* a_this, RE::BSAnimationUpdateData& a_data)
+	{
+		ModifyAnimationUpdateData(a_this, a_data);
+
+		// set pitch for upper body modifier, don't use vanilla pitch because it's weird
 		if (ShouldSetPitchModifier(a_this)) {
-		//if (actorState->actorState2.weaponState == RE::WEAPON_STATE::kDrawn) {
+			//if (actorState->actorState2.weaponState == RE::WEAPON_STATE::kDrawn) {
 			float dummy;
 			auto& currentCombatTarget = a_this->GetActorRuntimeData().currentCombatTarget;
 			if (currentCombatTarget && a_this->GetGraphVariableFloat("Collision_PitchMult"sv, dummy)) {  // only do this if the actor has a target and the graph contains the variable
@@ -63,7 +67,7 @@ namespace Hooks
 					if (!Utils::GetTorsoPos(a_this, actorPos)) {
 						actorPos = a_this->GetLookingAtLocation();
 					}
-					
+
 					RE::NiPoint3 targetPos;
 					if (!Utils::GetTorsoPos(combatTarget.get(), targetPos)) {
 						targetPos = combatTarget->GetLookingAtLocation();
@@ -77,21 +81,21 @@ namespace Hooks
 
 					a_this->SetGraphVariableFloat("Collision_PitchMult"sv, Utils::RadianToDegree(pitch));
 				}
-			}			
+			}
 		} else {
 			a_this->SetGraphVariableFloat("Collision_PitchMult"sv, 0.f);
 		}
 
-		_UpdateAnimationInternal(a_this, a_deltaTime);
+		_Character_ModifyAnimationUpdateData(a_this, a_data);
 	}
 
-	void UpdateHooks::ApplyMovement(RE::Actor* a_this, float a_deltaTime)
+	void UpdateHooks::PlayerCharacter_ModifyAnimationUpdateData(RE::PlayerCharacter* a_this, RE::BSAnimationUpdateData& a_data)
 	{
-		if (Settings::bEnableHitstop) {
-			a_deltaTime *= PrecisionHandler::GetHitstopMultiplier(a_this->GetHandle(), a_deltaTime);
-		}
+		ModifyAnimationUpdateData(a_this, a_data);
 
-		_ApplyMovement(a_this, a_deltaTime);
+		a_this->SetGraphVariableFloat("Collision_PitchMult"sv, -Utils::RadianToDegree(a_this->GetAngleX()));
+
+		_PlayerCharacter_ModifyAnimationUpdateData(a_this, a_data);
 	}
 
 	bool UpdateHooks::ShouldSetPitchModifier(RE::Actor* a_this)
@@ -127,7 +131,7 @@ namespace Hooks
 
 			return false;
 		};
-		
+
 		if (checkHand(a_this->GetEquippedObject(false))) {
 			return true;
 		}
@@ -139,19 +143,30 @@ namespace Hooks
 		return false;
 	}
 
-	void UpdateHooks::PlayerCharacter_UpdateAnimation(RE::PlayerCharacter* a_this, float a_deltaTime)
+	void UpdateHooks::ModifyAnimationUpdateData(RE::Actor* a_this, RE::BSAnimationUpdateData& a_data)
 	{
 		if (Settings::bEnableHitstop) {
 			auto actorHandle = a_this->GetHandle();
-			float mult = PrecisionHandler::GetHitstopMultiplier(actorHandle, a_deltaTime);
-			PrecisionHandler::UpdateHitstop(actorHandle, a_deltaTime);
-			a_deltaTime *= mult;
+			float mult = PrecisionHandler::GetHitstopMultiplier(actorHandle, a_data.deltaTime);
+			PrecisionHandler::UpdateHitstop(actorHandle, a_data.deltaTime);
+			a_data.deltaTime *= mult;
 		}
-		
-		// set pitch for upper body modifier
-		a_this->SetGraphVariableFloat("Collision_PitchMult"sv, -Utils::RadianToDegree(a_this->GetAngleX()));
+	}
 
-		_PlayerCharacter_UpdateAnimation(a_this, a_deltaTime);
+	RE::Actor* UpdateHooks::GetActorFromRbx()
+	{
+		struct GetActorFromRbx : Xbyak::CodeGenerator
+		{
+			GetActorFromRbx()
+			{
+				mov(rax, rbx);
+				ret();
+			}
+		};
+
+		static GetActorFromRbx getActorFromRbx;
+
+		return getActorFromRbx.getCode<RE::Actor* (*)()>()();
 	}
 
 	RE::Actor* AttackHooks::Func1(RE::Actor* a_this)
@@ -297,7 +312,7 @@ namespace Hooks
 		}
 
 		uint32_t cullState = 7;  // do not cull this actor
-		
+
 		auto& unk274 = a_actor->GetActorRuntimeData().unk274;
 		unk274 &= 0xFFFFFFF0;
 		unk274 |= cullState & 0xF;
@@ -345,7 +360,7 @@ namespace Hooks
 				RE::BSWriteLockGuard lock(world->worldLock);
 
 				RE::bhkCollisionFilter* filter = static_cast<RE::bhkCollisionFilter*>(world->GetWorld2()->collisionFilter);
-				
+
 				// run callbacks from other plugins
 				precisionHandler->RunPrecisionLayerSetupCallbacks();
 
@@ -413,23 +428,30 @@ namespace Hooks
 					charController->GetCollisionFilterInfo(filterInfo);
 				}
 				uint16_t collisionGroup = filterInfo >> 16;
-				
+
 				bool bIsHittableCharController = PrecisionHandler::IsCharacterControllerHittableCollisionGroup(collisionGroup);
-				
+
 				bool bIsActorDisabled = PrecisionHandler::IsActorDisabled(actorHandle);
 
 				bool bIsActorDead = actor->IsDead();
 
 				bool bShouldAddToWorld = !Settings::bDisableMod && !bIsActorDisabled && !bIsActorDead && actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
 				bool bShouldRemoveFromWorld = Settings::bDisableMod || bIsActorDisabled || bIsActorDead || actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
-				
+
 				bool bIsAddedToWorld = IsSkeletonAddedToWorld(actorHandle);
 
 				bool bActiveActorsContainsHandle = PrecisionHandler::IsActorActive(actorHandle);
 				bool bIsRagdollAdded = PrecisionHandler::IsRagdollAdded(actorHandle);
+				bool bIsRagdollAddedToWorld = IsRagdollAddedToWorld(actorHandle);
 
 				bool bIsActiveActor = bActiveActorsContainsHandle || bIsHittableCharController;
 				bool bCanAddToWorld = CanAddToWorld(actorHandle);
+
+				// Queue active ragdoll for removal if it's added even though ragdoll isn't
+				if (bIsRagdollAdded && !bIsRagdollAddedToWorld) {
+					WriteLocker locker(PrecisionHandler::ragdollsToRemoveLock);
+					PrecisionHandler::ragdollsToRemove.emplace(actor->GetHandle());
+				}
 
 				if (bShouldAddToWorld) {
 					if (!bIsAddedToWorld || !bIsActiveActor) {
@@ -454,13 +476,16 @@ namespace Hooks
 							PrecisionHandler::AddActorSink(actor);
 						}
 					}
-					
+
 					// Add ragdoll if needed
 					if (!bIsRagdollAdded && bCanAddToWorld) {
-						bool bShouldAddRagdollToWorld = PrecisionHandler::ragdollsToAdd.contains(actorHandle);
+						bool bShouldAddRagdollToWorld = false;
+						{
+							ReadLocker locker(PrecisionHandler::ragdollsToAddLock);
+							bShouldAddRagdollToWorld = PrecisionHandler::ragdollsToAdd.contains(actorHandle);
+						}
 						if (bShouldAddRagdollToWorld) {
-							bool bIsRagdollAddedToWorld = IsRagdollAddedToWorld(actorHandle) && PrecisionHandler::IsRagdollAdded(actorHandle);
-							if (!bIsRagdollAddedToWorld) {
+							if (!bIsRagdollAddedToWorld || !bIsRagdollAdded) {
 								AddRagdollToWorld(actorHandle);
 							}
 						}
@@ -481,7 +506,7 @@ namespace Hooks
 							RemoveSkeletonFromWorld(actorHandle);
 
 							bool bIsRagdollCollision = false;
-							
+
 							{
 								ReadLocker locker(PrecisionHandler::ragdollCollisionGroupsLock);
 								bIsRagdollCollision = PrecisionHandler::ragdollCollisionGroups.size() > 0 && PrecisionHandler::ragdollCollisionGroups.contains(collisionGroup);
@@ -504,8 +529,6 @@ namespace Hooks
 							PrecisionHandler::RemoveActorSink(actor);
 						}
 					}
-
-					
 				}
 
 				// Remove ragdoll if necessary
@@ -533,8 +556,6 @@ namespace Hooks
 		};
 
 		{
-			ReadLocker locker(PrecisionHandler::pendingRagdollsLock);
-
 			processActor(playerCharacter->GetHandle());
 
 			auto processLists = RE::ProcessLists::GetSingleton();
@@ -544,14 +565,15 @@ namespace Hooks
 		}
 
 		{
-			WriteLocker locker(PrecisionHandler::pendingRagdollsLock);
+			WriteLocker locker(PrecisionHandler::ragdollsToAddLock);
+			WriteLocker locker2(PrecisionHandler::ragdollsToRemoveLock);
 			PrecisionHandler::ragdollsToAdd.clear();
 			PrecisionHandler::ragdollsToRemove.clear();
 		}
 
 		precisionHandler->ProcessPostHavokHitJobs();
 	}
-	
+
 	void HavokHooks::BShkbAnimationGraph_UpdateAnimation(RE::BShkbAnimationGraph* a_this, RE::BShkbAnimationGraph_UpdateData* a_updateData, void* a3)
 	{
 		//RE::Actor* actor = a_this->holder;
@@ -566,7 +588,7 @@ namespace Hooks
 	}
 
 	void HavokHooks::hkbRagdollDriver_DriveToPose(RE::hkbRagdollDriver* a_driver, float a_deltaTime, const RE::hkbContext& a_context, RE::hkbGeneratorOutput& a_generatorOutput)
-	{		
+	{
 		PreDriveToPose(a_driver, a_deltaTime, a_context, a_generatorOutput);
 		_hkbRagdollDriver_DriveToPose(a_driver, a_deltaTime, a_context, a_generatorOutput);
 		PostDriveToPose(a_driver, a_deltaTime, a_context, a_generatorOutput);
@@ -577,6 +599,7 @@ namespace Hooks
 		PrePostPhysics(a_driver, a_context, a_generatorInOut);
 		_hkbRagdollDriver_PostPhysics(a_driver, a_context, a_generatorInOut);
 		PostPostPhysics(a_driver, a_context, a_generatorInOut);
+		PostPostPostPhysics(a_driver);
 	}
 
 	bool HavokHooks::BShkbAnimationGraph_ShouldAddToGraphListeners(RE::BShkbAnimationGraph* a_this)
@@ -606,7 +629,7 @@ namespace Hooks
 			a_enable = false;
 		}
 
-		_ToggleCharacterBumper(a_charController, a_enable);		
+		_ToggleCharacterBumper(a_charController, a_enable);
 	}
 
 	bool HavokHooks::bhkCollisionFilter_CompareFilterInfo1(RE::bhkCollisionFilter* a_this, uint32_t a_filterInfoA, uint32_t a_filterInfoB)
@@ -776,8 +799,8 @@ namespace Hooks
 	void HavokHooks::AddPrecisionCollisionLayers(RE::bhkWorld* a_world)
 	{
 		RE::bhkCollisionFilter* worldFilter = (RE::bhkCollisionFilter*)a_world->GetWorld1()->collisionFilter;
-		
-		// Create our attack layer in the first unused vanilla layer (56)		
+
+		// Create our attack layer in the first unused vanilla layer (56)
 		worldFilter->layerBitfields[static_cast<int32_t>(CollisionLayer::kPrecisionAttack)] = Settings::iPrecisionAttackLayerBitfield;
 		worldFilter->collisionLayerNames[static_cast<int32_t>(CollisionLayer::kPrecisionAttack)] = Settings::sPrecisionAttackLayerName;
 		// Set whether other layers should collide with our new layer
@@ -799,7 +822,7 @@ namespace Hooks
 	void HavokHooks::EnsurePrecisionCollisionLayers(RE::bhkWorld* a_world)
 	{
 		RE::bhkCollisionFilter* worldFilter = (RE::bhkCollisionFilter*)a_world->GetWorld1()->collisionFilter;
-		
+
 		uint64_t currentPrecisionAttackBitfield = worldFilter->layerBitfields[static_cast<int32_t>(CollisionLayer::kPrecisionAttack)];
 		if (currentPrecisionAttackBitfield != Settings::iPrecisionAttackLayerBitfield) {
 			RE::BSWriteLockGuard lock(a_world->worldLock);
@@ -874,7 +897,7 @@ namespace Hooks
 	bool HavokHooks::IsSkeletonAddedToWorld(RE::ActorHandle a_actorHandle)
 	{
 		ReadLocker locker(PrecisionHandler::activeActorsLock);
-		
+
 		return PrecisionHandler::activeActors.size() > 0 && PrecisionHandler::activeActors.contains(a_actorHandle);
 	}
 
@@ -967,7 +990,16 @@ namespace Hooks
 							auto activeRagdoll = std::make_shared<ActiveRagdoll>();
 							PrecisionHandler::activeRagdolls.emplace(driver.get(), activeRagdoll);
 							PrecisionHandler::activeActorsWithRagdolls.emplace(a_actorHandle);
-						
+
+							Blender& blender = activeRagdoll->blender;
+							blender.StartBlend(Blender::BlendType::kAnimToRagdoll, Settings::fBlendInTime);
+
+							RE::hkQsTransform* poseLocal = hkbCharacter_getPoseLocal(driver->character);
+							blender.initialPose.assign(poseLocal, poseLocal + driver->character->numPoseLocal);
+							blender.bIsFirstBlendFrame = false;
+
+							activeRagdoll->state = RagdollState::kBlendIn;
+
 							if (!graph->physicsWorld) {
 								// World must be set before calling BShkbAnimationGraph::AddRagdollToWorld(), and is required for the graph to register its physics step listener (and hence call hkbRagdollDriver::driveToPose())
 								graph->physicsWorld = actor->parentCell->GetbhkWorld();
@@ -1042,7 +1074,7 @@ namespace Hooks
 							// Set bones to keyframed
 							Utils::SetBonesKeyframed(driver.get());
 						}
-						
+
 						{
 							WriteLocker locker(PrecisionHandler::activeRagdollsLock);
 							PrecisionHandler::activeRagdolls.erase(driver.get());
@@ -1062,9 +1094,12 @@ namespace Hooks
 			return false;
 		}
 
-		if (PrecisionHandler::ragdollsToRemove.contains(a_actorHandle)) {
-			return true;
-		}		
+		{
+			ReadLocker locker(PrecisionHandler::ragdollsToRemoveLock);
+			if (PrecisionHandler::ragdollsToRemove.contains(a_actorHandle)) {
+				return true;
+			}
+		}
 
 		RE::Actor* actor = a_actorHandle.get().get();
 		if (actor->IsInKillMove()) {
@@ -1082,8 +1117,7 @@ namespace Hooks
 
 		RE::Actor* actor = a_actorHandle.get().get();
 
-		if (actor->IsInRagdollState() || actor->GetOccupiedFurniture())
-	{
+		if (actor->IsInRagdollState() || actor->GetOccupiedFurniture()) {
 			return false;
 		}
 
@@ -1247,7 +1281,7 @@ namespace Hooks
 		RE::hkbGeneratorOutput::TrackHeader* rigidBodyHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_RIGID_BODY_RAGDOLL_CONTROLS);
 		RE::hkbGeneratorOutput::TrackHeader* poweredHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_POWERED_RAGDOLL_CONTROLS);
 		RE::hkbGeneratorOutput::TrackHeader* poweredWorldFromModelModeHeader = GetTrackHeader(a_generatorOutput, RE::hkbGeneratorOutput::StandardTracks::TRACK_POWERED_RAGDOLL_WORLD_FROM_MODEL_MODE);
-		
+
 		ragdoll->deltaTime = a_deltaTime;
 		ragdoll->elapsedTime += a_deltaTime;
 
@@ -1255,30 +1289,8 @@ namespace Hooks
 			ragdoll->impulseTime -= a_deltaTime;
 		}
 
-		auto knockState = actor->AsActorState()->GetKnockState();
-		if (Settings::bBlendWhenGettingUp) {
-			if (ragdoll->knockState == KnockState::kQueued && knockState == KnockState::kGetUp) {
-				// Went from starting to get up to actually getting up
-				ragdoll->blender.StartBlend(Blender::BlendType::kRagdollToCurrentRagdoll, Settings::fGetUpBlendTime);
-			}
-		}
-		ragdoll->knockState = knockState;
-
-		auto bActorInRagdollState = actor->IsInRagdollState();
-
-		if ((ragdoll->impulseTime > 0.f || bActorInRagdollState) && (ragdoll->state < RagdollState::kBlendIn)) {
-			ragdoll->blender.StartBlend(Blender::BlendType::kAnimToRagdoll, Settings::fBlendInTime);
-			ragdoll->state = RagdollState::kBlendIn;
-		}
-
-		if (bActorInRagdollState || Utils::IsActorGettingUp(actor)) {
-			return;
-		}
-
-		if (ragdoll->impulseTime <= 0.f && ragdoll->state > RagdollState::kBlendOut) {
-			ragdoll->blender.StartBlend(Blender::BlendType::kRagdollToAnim, Settings::fBlendOutTime);
-			ragdoll->state = RagdollState::kBlendOut;
-		}
+		auto prevKnockState = ragdoll->knockState;
+		ragdoll->knockState = actor->AsActorState()->GetKnockState();
 
 		bool isRigidBodyOn = rigidBodyHeader && rigidBodyHeader->onFraction > 0.f;
 		bool isPoweredOn = poweredHeader && poweredHeader->onFraction > 0.f;
@@ -1331,6 +1343,19 @@ namespace Hooks
 			ragdoll->worldFromModel = worldFromModel;
 		}
 
+		auto bActorInRagdollState = actor->IsInRagdollState();
+
+		if (!bActorInRagdollState) {
+			if (ragdoll->impulseTime <= 0.f && ragdoll->state < RagdollState::kBlendOut) {
+				ragdoll->blender.StartBlend(Blender::BlendType::kRagdollToAnim, Settings::fBlendOutTime);
+				ragdoll->state = RagdollState::kBlendOut;
+			}
+			if (ragdoll->impulseTime > 0.f && ragdoll->state == RagdollState::kBlendOut) {
+				ragdoll->blender.StartBlend(Blender::BlendType::kRagdollToCurrentRagdoll, Settings::fBlendOutTime);
+				ragdoll->state = RagdollState::kBlendIn;
+			}
+		}
+
 		bool isPoweredOnly = !isRigidBodyOn && isPoweredOn;
 		if (isPoweredOnly) {
 			bool allNoForce = true;
@@ -1377,23 +1402,26 @@ namespace Hooks
 			}
 		}
 
+		if (Settings::bBlendWhenGettingUp) {
+			if (prevKnockState == KnockState::kQueued && ragdoll->knockState == KnockState::kGetUp) {
+				// Went from starting to get up to actually getting up
+				ragdoll->blender.StartBlend(Blender::BlendType::kRagdollToCurrentRagdoll, Settings::fGetUpBlendTime, true);
+				ragdoll->blender.initialPose = ragdoll->ragdollPose;  // the previous ragdoll pose
+				ragdoll->blender.bIsFirstBlendFrame = false;
+			}
+		}
+
 		ragdoll->bWasRigidBodyOn = isRigidBodyOn;
 
 		if (Settings::bEnableKeyframes) {
 			if (keyframedBonesHeader && keyframedBonesHeader->onFraction > 0.f) {
-				if (ragdoll->state == RagdollState::kKeyframed) {
-					SetBonesKeyframedReporting(a_driver, a_generatorOutput, *keyframedBonesHeader);
-				} else if (ragdoll->elapsedTime <= Settings::fBlendInKeyframeTime) {
+				if (ragdoll->elapsedTime <= Settings::fBlendInKeyframeTime) {
 					SetBonesKeyframedReporting(a_driver, a_generatorOutput, *keyframedBonesHeader);
 				}
-				//} else {
-				//	// Explicitly make bones not keyframed
-				//	keyframedBonesHeader->onFraction = 0.f;
-				//}
 			}
 		}
 
-		float deltaTimeMult = 1.f;		
+		float deltaTimeMult = 1.f;
 		float deltaTime = a_deltaTime;
 		if (deltaTime > 0.f) {  // avoid division by zero
 			if (actor->IsPlayerRef()) {
@@ -1454,7 +1482,11 @@ namespace Hooks
 
 		ragdoll->isOn = isRigidBodyOn;
 		if (!ragdoll->isOn) {
-			ragdoll->state = RagdollState::kKeyframed;  // reset state
+			ragdoll->state = RagdollState::kIdle;  // reset state
+			return;
+		}
+
+		if (bActorInRagdollState) {
 			return;
 		}
 
@@ -1567,7 +1599,7 @@ namespace Hooks
 							if (auto rootNode = RE::NiPointer<RE::NiAVObject>(GetNiObjectFromCollidable(&rootRigidBody->collidable))) {
 								const RE::hkQsTransform& worldFromModel = *(RE::hkQsTransform*)Track_getData(a_generatorOutput, *worldFromModelHeader);
 								RE::hkQsTransform* highResPoseLocal = (RE::hkQsTransform*)Track_getData(a_generatorOutput, *poseHeader);
-								
+
 								static std::vector<RE::hkQsTransform> poseWorld{};
 								MapHighResPoseLocalToLowResPoseWorld(a_driver, worldFromModel, highResPoseLocal, poseWorld);
 
@@ -1613,7 +1645,7 @@ namespace Hooks
 										}
 
 										// Reset all ragdoll controller state to stop it from going crazy
-										hkbRagdollDriver_reset(a_driver);										
+										hkbRagdollDriver_reset(a_driver);
 									}
 								}
 
@@ -1657,9 +1689,6 @@ namespace Hooks
 		if (!ragdoll) {
 			return;
 		}
-		
-		if (!ragdoll->isOn)
-			return;
 
 		RE::hkbGeneratorOutput::TrackHeader* poseHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_POSE);
 		if (poseHeader && poseHeader->onFraction > 0.f) {
@@ -1693,11 +1722,12 @@ namespace Hooks
 
 			// Copy pose track now since postPhysics() just set it to the high-res ragdoll pose
 			ragdoll->ragdollPose.assign(poseOut, poseOut + numPoses);
+		}
 
-			if (ragdoll->state == RagdollState::kKeyframed && ragdoll->animPose.size() > 0) {
-				// When in keyframed state, force the output pose to be the anim pose
-				memcpy(poseOut, ragdoll->animPose.data(), ragdoll->animPose.size() * sizeof(RE::hkQsTransform));
-			}
+		RE::hkbGeneratorOutput::TrackHeader* worldFromModelHeader = GetTrackHeader(a_generatorInOut, RE::hkbGeneratorOutput::StandardTracks::TRACK_WORLD_FROM_MODEL);
+		if (worldFromModelHeader && worldFromModelHeader->onFraction > 0.f) {
+			RE::hkQsTransform& worldFromModel = *(RE::hkQsTransform*)Track_getData(a_generatorInOut, *worldFromModelHeader);
+			ragdoll->worldFromModelPostPhysics = worldFromModel;
 		}
 
 		if (!ragdoll->isOn) {
@@ -1743,15 +1773,17 @@ namespace Hooks
 
 		Blender& blender = ragdoll->blender;
 		if (blender.bIsActive) {
+			ragdoll->bReadyToRemove = false;
 			bool bDone = !Settings::bDoBlending;
 			if (!bDone) {
 				bDone = blender.Update(*ragdoll, *a_driver, a_generatorInOut, ragdoll->deltaTime);
 			}
 			if (bDone) {
 				if (state == RagdollState::kBlendIn) {
-					state = RagdollState::kRagdoll;
+					state = RagdollState::kIdle;
 				} else if (state == RagdollState::kBlendOut) {
-					state = RagdollState::kKeyframed;
+					state = RagdollState::kIdle;
+					ragdoll->bReadyToRemove = true;
 				}
 			}
 		}
@@ -1771,10 +1803,23 @@ namespace Hooks
 		}
 
 		ragdoll->state = state;
+	}
+
+	void HavokHooks::PostPostPostPhysics(RE::hkbRagdollDriver* a_driver)
+	{
+		RE::Actor* actor = Utils::GetActorFromRagdollDriver(a_driver);
+		if (!actor) {
+			return;
+		}
+
+		auto ragdoll = PrecisionHandler::GetActiveRagdollFromDriver(a_driver);
+		if (!ragdoll) {
+			return;
+		}
 
 		// Queue the ragdoll for removal if necessary
-		if (state == RagdollState::kKeyframed) {
-			WriteLocker locker(PrecisionHandler::pendingRagdollsLock);
+		if (ragdoll->bReadyToRemove) {
+			WriteLocker locker(PrecisionHandler::ragdollsToRemoveLock);
 			PrecisionHandler::ragdollsToRemove.emplace(actor->GetHandle());
 		}
 	}
@@ -1793,7 +1838,7 @@ namespace Hooks
 				}
 			}
 		}
-		
+
 		PrecisionHandler::GetSingleton()->RunPrePhysicsStepCallbacks(a_world);
 	}
 
@@ -1888,12 +1933,12 @@ namespace Hooks
 			// Neither collidee is a character controller
 			return CollisionFilterComparisonResult::Continue;
 		}
-		
+
 		if (layerA == CollisionLayer::kCharController && layerB == CollisionLayer::kCharController) {
 			// Both collidees are character controllers
 			if (Settings::bUseRagdollCollisionWhenAllowed) {
 				// Disable char controller collisions with the character controller of an actor that has the AllowRagdollCollision flag
-				
+
 				uint16_t groupA = a_filterInfoA >> 16;
 				uint16_t groupB = a_filterInfoB >> 16;
 
@@ -1905,7 +1950,7 @@ namespace Hooks
 				}
 			}
 			return CollisionFilterComparisonResult::Continue;
-		}		
+		}
 
 		// Only one of the collidees is a character controller
 		uint32_t charControllerFilter = layerA == CollisionLayer::kCharController ? a_filterInfoA : a_filterInfoB;
@@ -1921,14 +1966,14 @@ namespace Hooks
 		}
 
 		bool bIsRagdollCollision = PrecisionHandler::IsRagdollCollsionGroup(otherGroup);
-		
+
 		// Ignore char controller vs bipedNoCC collision for actors with ragdoll collision, as they will collide with our body layer instead
 		// Letting them collide with the ragdolled on impulse body would make them push the ragdoll around, resulting in weird behavior
 		// and a very ugly snap back to keyframed positions once the ragdoll is removed after the impulse
 		if (otherLayer == CollisionLayer::kBipedNoCC && bIsRagdollCollision) {
 			return CollisionFilterComparisonResult::Ignore;
 		}
-		
+
 		// Ignore char controller vs precision body collisions for actors that don't have ragdoll collision
 		if (otherLayer == CollisionLayer::kPrecisionBody && !bIsRagdollCollision) {
 			return CollisionFilterComparisonResult::Ignore;

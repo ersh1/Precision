@@ -19,7 +19,7 @@ namespace Utils
 	[[nodiscard]] inline float Clamp(float value, float min, float max)
 	{
 		return value < min ? min : value < max ? value :
-                                                 max;
+		                                         max;
 	}
 
 	[[nodiscard]] inline float AngleDifference(float a_angle1, float a_angle2)
@@ -137,14 +137,14 @@ namespace Utils
 	}
 
 	inline float DotProduct(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB) { return a_quatA.w * a_quatB.w + a_quatA.x * a_quatB.x + a_quatA.y * a_quatB.y + a_quatA.z * a_quatB.z; }
-	
+
 	inline float NiQuaternionLength(const RE::NiQuaternion& a_quat) { return sqrtf(DotProduct(a_quat, a_quat)); }
 
 	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quatA, const RE::NiQuaternion& a_quatB);
 	RE::NiQuaternion NiQuaternionMultiply(const RE::NiQuaternion& a_quat, float a_multiplier);
 
 	RE::NiQuaternion NiQuaternionIdentity();
-	RE::NiQuaternion NormalizeNiQuat(const RE::NiQuaternion& a_quat);	
+	RE::NiQuaternion NormalizeNiQuat(const RE::NiQuaternion& a_quat);
 
 	[[nodiscard]] inline RE::NiPoint3 RotateAngleAxis(const RE::NiPoint3& vec, const float angle, const RE::NiPoint3& axis)
 	{
@@ -208,8 +208,8 @@ namespace Utils
 	}
 
 	void DrawCollider(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color);
-	void DrawActorColliders(RE::Actor* a_actor, float a_duration, glm::vec4 a_color);
-	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color);
+	void DrawActorColliders(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_root, float a_duration, glm::vec4 a_color);
+	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color, bool a_bCheckJumpIframes = false);
 
 	bool GetCapsuleParams(RE::NiAVObject* a_node, Capsule& a_outCapsule);
 
@@ -239,6 +239,7 @@ namespace Utils
 	[[nodiscard]] RE::Actor* GetActorFromRagdollDriver(RE::hkbRagdollDriver* a_driver);
 
 	[[nodiscard]] int GetAnimBoneIndex(RE::hkbCharacter* a_character, const RE::BSFixedString& a_boneName);
+	[[nodiscard]] int GetAnimBoneIndexFromRagdollBoneIndex(const RE::hkbRagdollDriver& a_driver, int a_ragdollBoneIndex);
 
 	[[nodiscard]] inline bool IsMotionTypeMoveable(uint8_t a_motionType)
 	{
@@ -285,7 +286,7 @@ namespace Utils
 
 	bool GetActiveAnim(RE::Actor* a_actor, RE::BSFixedString& a_outProjectName, RE::hkStringPtr& a_outAnimationName, float& a_outAnimationTime);
 
-	RE::NiPoint3 CatmullRom(const RE::NiPoint3& a_p0, const RE::NiPoint3& a_p1, const RE::NiPoint3& a_p2, const RE::NiPoint3& a_p3, float a_t);	
+	RE::NiPoint3 CatmullRom(const RE::NiPoint3& a_p0, const RE::NiPoint3& a_p1, const RE::NiPoint3& a_p2, const RE::NiPoint3& a_p3, float a_t);
 
 	[[nodiscard]] inline RE::NiPoint3 ToOrientationRotation(const RE::NiPoint3& a_vector)
 	{
@@ -312,7 +313,8 @@ namespace Utils
 
 	void FillCloningProcess(RE::NiCloningProcess& a_cloningProcess, const RE::NiPoint3& a_scale);
 
-	[[nodiscard]] inline float GetUnarmedReach(RE::Actor* a_actor) {
+	[[nodiscard]] inline float GetUnarmedReach(RE::Actor* a_actor)
+	{
 		if (auto race = a_actor->GetRace()) {
 			return race->data.unarmedReach;
 		}

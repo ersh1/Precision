@@ -6,7 +6,7 @@ struct AttackTrail
 {
 	AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::TESObjectCELL* a_cell, RE::InventoryEntryData* a_weaponItem, bool a_bIsLeftHand, bool a_bTrailUseTrueLength, std::optional<TrailOverride> a_trailOverride = std::nullopt);
 
-	void Update(float a_deltaTime);
+	bool Update(float a_deltaTime);
 
 	bool GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::InventoryEntryData* a_item, bool a_bIsLeftHand, TrailDefinition& a_outTrailDefinition) const;
 
@@ -42,5 +42,4 @@ struct AttackTrail
 
 private:
 	RE::BSVisit::BSVisitControl ApplyColorSettings(RE::BSGeometry* a_geometry, bool a_init, bool a_bExpired);
-		
 };

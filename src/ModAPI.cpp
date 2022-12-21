@@ -117,7 +117,7 @@ namespace Messaging
 	}
 
 	void PrecisionInterface::ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept
-	{		
+	{
 		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_actorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true, true);
 	}
 
@@ -220,5 +220,4 @@ namespace Messaging
 		bool bAttackerIsPlayer = a_sourceActorHandle.native_handle() == 0x100000;
 		PrecisionHandler::GetSingleton()->ApplyHitImpulse(a_targetActorHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, true, bAttackerIsPlayer);
 	}
-
 }

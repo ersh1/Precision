@@ -88,7 +88,7 @@ namespace Render
 			D3D11_DEPTH_STENCIL_DESC dsDesc;
 			dsDesc.DepthEnable = info.write;
 			dsDesc.DepthWriteMask = info.test ? D3D11_DEPTH_WRITE_MASK::D3D11_DEPTH_WRITE_MASK_ALL :
-                                                D3D11_DEPTH_WRITE_MASK::D3D11_DEPTH_WRITE_MASK_ZERO;
+			                                    D3D11_DEPTH_WRITE_MASK::D3D11_DEPTH_WRITE_MASK_ZERO;
 			dsDesc.DepthFunc = info.mode;
 			dsDesc.StencilEnable = false;
 			ctx.device->CreateDepthStencilState(&dsDesc, state.put());

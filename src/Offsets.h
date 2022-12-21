@@ -13,13 +13,13 @@ static float* g_worldScale = (float*)RELOCATION_ID(231896, 188105).address();
 static float* g_worldScaleInverse = (float*)RELOCATION_ID(230692, 187407).address();
 static DWORD* g_dwTlsIndex = (DWORD*)RELOCATION_ID(520865, 407383).address();  // 2F50B74, 2FEB6F4
 
-static bool* g_bAddBipedWhenKeyframed = (bool*)RELOCATION_ID(500874, 358839).address();  // 1DB1818, 1E45818
+static bool* g_bAddBipedWhenKeyframed = (bool*)RELOCATION_ID(500874, 358839).address();          // 1DB1818, 1E45818
 static bool* g_bAddBipedWhenKeyframedIndirect = (bool*)RELOCATION_ID(512240, 389098).address();  // 1E08301, 1E9D189
 
 static void* g_unkCloneValue1 = (void*)RELOCATION_ID(501133, 359452).address();          // 1DB348C, 1E47508
 static void* g_unkCloneValue2 = (void*)RELOCATION_ID(501132, 359451).address();          // 1DB3488, 1E47504
 static uint32_t* g_unkCloneValue3 = (uint32_t*)RELOCATION_ID(523909, 410490).address();  // 3012500, 30AD080
-static char* g_unkCloneValue4 = (char*)RELOCATION_ID(511989, 388581).address(); 
+static char* g_unkCloneValue4 = (char*)RELOCATION_ID(511989, 388581).address();
 
 static RE::BSRenderManager* g_renderManager = (RE::BSRenderManager*)RELOCATION_ID(524907, 411393).address();
 
@@ -39,7 +39,6 @@ static void* g_actorMediator = (void*)RELOCATION_ID(517059, 403567).address();  
 static void* g_142EFF990 = (void*)RELOCATION_ID(514960, 401100).address();  // 2EFF990, 2F9A0A0
 
 static void** g_142EC5C60 = (void**)RELOCATION_ID(514725, 400883).address();  // 2EC5C60, 2F603B0
-
 
 inline volatile std::uint32_t* GetBhkSerializableCount()
 {
@@ -249,7 +248,7 @@ typedef void (*thkRotation_setFromQuat)(RE::hkRotation* a_this, const RE::hkQuat
 static REL::Relocation<thkRotation_setFromQuat> hkRotation_setFromQuat{ RELOCATION_ID(56674, 57081) };  // 9C7FC0, 9EC7B0
 
 typedef void (*thkpKeyFrameUtility_applyHardKeyFrame)(const RE::hkVector4& a_nextPosition, const RE::hkQuaternion& a_nextOrientation, float a_invDeltaTime, RE::hkpRigidBody* a_body);
-static REL::Relocation<thkpKeyFrameUtility_applyHardKeyFrame> hkpKeyFrameUtility_applyHardKeyFrame{ RELOCATION_ID(61579, 62478) };  // ABC3D0, AE0BE0
+static REL::Relocation<thkpKeyFrameUtility_applyHardKeyFrame> hkpKeyFrameUtility_applyHardKeyFrame{ RELOCATION_ID(61579, 62478) };                // ABC3D0, AE0BE0
 static REL::Relocation<thkpKeyFrameUtility_applyHardKeyFrame> hkpKeyFrameUtility_applyHardKeyFrameAsynchronously{ RELOCATION_ID(61580, 62479) };  // ABC700, AE0F10
 
 typedef void (*tbhkNiCollisionObject_ctor)(RE::bhkNiCollisionObject* a_this);

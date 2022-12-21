@@ -59,13 +59,13 @@ namespace Messaging
 		virtual APIResult AddCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle, CollisionFilterSetupCallback&& a_callback) noexcept override;
 		virtual APIResult RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;
 		virtual APIResult AddContactListenerCallback(SKSE::PluginHandle a_pluginHandle, ContactListenerCallback&& a_callback) noexcept override;
-		virtual APIResult RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;		
+		virtual APIResult RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle) noexcept override;
 		virtual bool IsActorActive(RE::ActorHandle a_actorHandle) const noexcept override;
 		virtual bool IsActorActiveCollisionGroup(uint16_t a_collisionGroup) const noexcept override;
 		virtual bool IsActorCharacterControllerHittable(RE::ActorHandle a_actorHandle) const noexcept override;
 		virtual bool IsCharacterControllerHittable(RE::bhkCharacterController* a_characterController) const noexcept override;
 		virtual bool IsCharacterControllerHittableCollisionGroup(uint16_t a_collisionGroup) const noexcept override;
-		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept override;		
+		virtual bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable) noexcept override;
 
 		// InterfaceVersion4
 		virtual APIResult AddPrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle, PrecisionLayerSetupCallback&& a_callback) noexcept override;
@@ -73,6 +73,5 @@ namespace Messaging
 		RE::NiAVObject* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node) noexcept override;
 		RE::hkpRigidBody* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_hkpRigidBody) noexcept override;
 		virtual void ApplyHitImpulse2(RE::ActorHandle a_targetActorHandle, RE::ActorHandle a_sourceActorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept override;
-				
 	};
 }

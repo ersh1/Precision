@@ -14,7 +14,6 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 			auto cell = actor->GetParentCell();
 			if (cell) {
 				if (Add(a_collisionDefinition)) {
-					
 					bool bIsWeapon = a_collisionDefinition.nodeName == "WEAPON"sv || a_collisionDefinition.nodeName == "SHIELD"sv;
 					if (bIsWeapon) {
 						RE::InventoryEntryData* weaponItem = nullptr;
@@ -55,7 +54,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 						// get visual weapon length
 						if (equippedWeapon) {
 							PrecisionHandler::TryGetCachedWeaponMeshReach(actor.get(), equippedWeapon, visualWeaponLength);
-						}						
+						}
 						if (!visualWeaponLength) {
 							if (attackCollisionNode->parent && attackCollisionNode->parent->children.size() > 0) {
 								auto& weaponNode = attackCollisionNode->parent->children[0];
@@ -111,7 +110,7 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 					}
 				}
 			}
-		}		
+		}
 	}
 }
 
@@ -168,7 +167,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 	bool bIsShieldBashing = false;
 	bool bIsBowBashing = false;
 	bool bIsBashing = actor->AsActorState()->GetAttackState() == RE::ATTACK_STATE_ENUM::kBash;
-	
+
 	if (bIsRightWeapon || bIsLeftWeapon) {
 		RE::TESObjectWEAP* currentWeapon = nullptr;
 
@@ -185,7 +184,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 			auto leftHandEquipment = currentProcess->GetEquippedLeftHand();
 
 			bool bIsBashingWithLeftHand = leftHandEquipment && leftHandEquipment != rightHandEquipment;  // has something else in the left hand so use the left hand node
-			if (!bIsBashingWithLeftHand && rightHandEquipment) {  // check if it's a bow, bows are held in the left hand even if they're technically right hand
+			if (!bIsBashingWithLeftHand && rightHandEquipment) {                                         // check if it's a bow, bows are held in the left hand even if they're technically right hand
 				if (auto rightHandWeapon = rightHandEquipment->As<RE::TESObjectWEAP>()) {
 					if (rightHandWeapon->weaponData.animationType == RE::WEAPON_TYPE::kBow) {
 						bIsBashingWithLeftHand = true;
@@ -193,7 +192,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 					}
 				}
 			}
-			
+
 			if (bIsBashingWithLeftHand) {
 				bIsShieldBashing = leftHandEquipment && leftHandEquipment->IsArmor();
 
@@ -210,11 +209,11 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 
 				if (leftHandEquipment) {
 					currentWeapon = leftHandEquipment->As<RE::TESObjectWEAP>();
-				}				
+				}
 			} else {
 				if (rightHandEquipment) {
 					currentWeapon = rightHandEquipment->As<RE::TESObjectWEAP>();
-				}				
+				}
 			}
 		}
 
@@ -234,7 +233,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 		if (a_collisionDefinition.radiusMult) {
 			radiusMult *= *a_collisionDefinition.radiusMult;
 		}
-		
+
 		if (a_collisionDefinition.transform) {
 			lengthMult *= a_collisionDefinition.transform->scale;
 			radiusMult *= a_collisionDefinition.transform->scale;
@@ -251,11 +250,11 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 				}
 			}
 		}
-		
+
 		// calc length and radius
 		length = PrecisionHandler::GetWeaponAttackLength(actorHandle, weaponNode, currentWeapon, a_collisionDefinition.capsuleLength, lengthMult) * havokWorldScale;
-		radius = PrecisionHandler::GetWeaponAttackRadius(actorHandle, a_collisionDefinition.capsuleRadius, radiusMult) * havokWorldScale;
-		
+		radius = PrecisionHandler::GetWeaponAttackRadius(actorHandle, currentWeapon, a_collisionDefinition.capsuleRadius, radiusMult) * havokWorldScale;
+
 		// special cases
 		if (bIsShieldBashing || bIsBowBashing) {
 			float halfLength = length * 0.5f;
@@ -298,7 +297,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 		// calc attack dimensions
 		if (!PrecisionHandler::GetNodeAttackDimensions(actorHandle, node, a_collisionDefinition.capsuleLength, lengthMult, a_collisionDefinition.capsuleRadius, radiusMult, vertexA, vertexB, radius)) {
 			return false;
-		}		
+		}
 	} else {
 		return false;
 	}
@@ -328,8 +327,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 	bool bIsPlayer = actor->IsPlayerRef();
 	if (!a_collisionDefinition.bWeaponTip && !a_collisionDefinition.bNoRecoil && !bIsBashing &&
 		(bIsRightWeapon || bIsLeftWeapon) &&
-		((bIsPlayer && Settings::bRecoilPlayer) || (!bIsPlayer && Settings::bRecoilNPC)))
-	{
+		((bIsPlayer && Settings::bRecoilPlayer) || (!bIsPlayer && Settings::bRecoilNPC))) {
 		auto recoilNode = RE::NiNode::Create(0);
 		node->AttachChild(recoilNode, true);
 
@@ -344,7 +342,7 @@ bool AttackCollision::Add(const CollisionDefinition& a_collisionDefinition)
 		RE::hkVector4 recoilVertexA{};
 		RE::hkVector4 recoilVertexB{};
 		float recoilRadius = radius;
-		
+
 		recoilVertexA.quad.m128_f32[0] = Settings::fRecoilCollisionLength * actor->GetScale() * havokWorldScale;
 
 		CreateCollision(world, actor, node, recoilNode, recoilVertexA, recoilVertexB, recoilRadius, CollisionLayer::kPrecisionRecoil);
@@ -361,7 +359,7 @@ bool AttackCollision::Remove()
 		return false;
 	}
 
-	RemoveCollision(recoilCollisionNode);	
+	RemoveCollision(recoilCollisionNode);
 	RemoveCollision(attackCollisionNode);
 
 	recoilCollisionNode = nullptr;
@@ -377,9 +375,9 @@ bool AttackCollision::RemoveRecoilCollision()
 	}
 
 	RemoveCollision(recoilCollisionNode);
-	
+
 	recoilCollisionNode = nullptr;
-	
+
 	return true;
 }
 
@@ -436,14 +434,14 @@ void AttackCollision::IncreaseDamagedCount()
 bool AttackCollision::HasHitMaterial(RE::MATERIAL_ID a_materialID) const
 {
 	ReadLocker locker(hitMaterialsLock);
-	
+
 	return _hitMaterials.contains(a_materialID);
 }
 
 void AttackCollision::AddHitMaterial(RE::MATERIAL_ID a_materialID, float a_duration)
 {
 	WriteLocker locker(hitMaterialsLock);
-	
+
 	_hitMaterials.emplace(a_materialID, a_duration);
 }
 
@@ -500,7 +498,7 @@ bool AttackCollision::Update(float a_deltaTime)
 	if (!actor) {
 		return false;
 	}
-	
+
 	if (actor->IsPlayerRef()) {
 		a_deltaTime *= Utils::GetPlayerTimeMultiplier();
 	}
@@ -508,7 +506,7 @@ bool AttackCollision::Update(float a_deltaTime)
 	a_deltaTime *= PrecisionHandler::GetSingleton()->GetHitstopMultiplier(actorHandle, a_deltaTime);
 
 	_hitRefs.Update(a_deltaTime);
-	
+
 	// remove hit materials after cooldown
 	{
 		WriteLocker locker(hitMaterialsLock);
@@ -567,7 +565,7 @@ bool AttackCollision::Update(float a_deltaTime)
 					}
 				}
 			}
-		}		
+		}
 	}
 
 	if (lifetime) {
@@ -667,7 +665,7 @@ bool AttackCollision::RemoveCollision(RE::NiPointer<RE::NiNode>& a_node)
 	RE::BSWriteLockGuard lock(world->worldLock);
 
 	bool bRemoved = false;
-	
+
 	if (a_node) {
 		if (a_node->collisionObject) {
 			auto niCollisionObject = a_node->collisionObject;
@@ -710,9 +708,8 @@ void AttackCollisions::Update(float a_deltaTime)
 			} else {
 				++it;
 			}
-			
 		}
-	}	
+	}
 
 	// update and remove expired entries
 	for (auto it = _IDHitRefs.begin(); it != _IDHitRefs.end();) {
@@ -728,14 +725,14 @@ void AttackCollisions::Update(float a_deltaTime)
 bool AttackCollisions::IsEmpty() const
 {
 	ReadLocker locker(lock);
-	
+
 	return _attackCollisions.empty();
 }
 
 std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(RE::NiAVObject* a_node) const
 {
 	ReadLocker locker(lock);
-	
+
 	auto it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_node](auto& attackCollision) { return attackCollision->attackCollisionNode.get() == a_node; });
 	if (it != _attackCollisions.end()) {
 		return *it;
@@ -747,7 +744,7 @@ std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(RE::NiAVOb
 std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(std::string_view a_nodeName) const
 {
 	ReadLocker locker(lock);
-	
+
 	auto it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_nodeName](auto& attackCollision) { return attackCollision->nodeName == a_nodeName; });
 	if (it != _attackCollisions.end()) {
 		return *it;
@@ -772,18 +769,17 @@ void AttackCollisions::AddAttackCollision(RE::ActorHandle a_actorHandle, const C
 {
 	auto newAttackCollision = std::make_shared<AttackCollision>(a_actorHandle, a_collisionDefinition);
 
-	if (newAttackCollision->IsValid())
-	{
+	if (newAttackCollision->IsValid()) {
 		WriteLocker locker(lock);
 
 		_attackCollisions.emplace_back(newAttackCollision);
-	}	
+	}
 }
 
 bool AttackCollisions::RemoveRecoilCollision()
 {
 	ReadLocker locker(lock);
-	
+
 	for (auto& attackCollision : _attackCollisions) {
 		if (attackCollision->RemoveRecoilCollision()) {
 			return true;
@@ -796,7 +792,7 @@ bool AttackCollisions::RemoveRecoilCollision()
 bool AttackCollisions::RemoveAttackCollision(const CollisionDefinition& a_collisionDefinition)
 {
 	WriteLocker locker(lock);
-	
+
 	auto prevSize = _attackCollisions.size();
 
 	if (!_attackCollisions.empty()) {
@@ -812,7 +808,7 @@ bool AttackCollisions::RemoveAttackCollision(const CollisionDefinition& a_collis
 				logger::error("Could not find an attack collision to remove: {}", a_collisionDefinition.nodeName);
 			}
 		}
-	}	
+	}
 
 	return prevSize != _attackCollisions.size();
 }
@@ -820,7 +816,7 @@ bool AttackCollisions::RemoveAttackCollision(const CollisionDefinition& a_collis
 bool AttackCollisions::RemoveAttackCollision(std::shared_ptr<AttackCollision> a_attackCollision)
 {
 	WriteLocker locker(lock);
-	
+
 	auto prevSize = _attackCollisions.size();
 
 	if (!_attackCollisions.empty()) {
@@ -836,7 +832,7 @@ bool AttackCollisions::RemoveAllAttackCollisions()
 	WriteLocker locker(lock);
 
 	auto prevSize = _attackCollisions.size();
-	
+
 	_attackCollisions.clear();
 
 	ClearData();
@@ -879,7 +875,7 @@ bool AttackCollisions::HasHitRef(RE::ObjectRefHandle a_handle) const
 			return true;
 		}
 	}
-	
+
 	return false;
 }
 

@@ -1,8 +1,8 @@
 #pragma once
+#include "ActiveActor.h"
 #include "AttackCollision.h"
 #include "AttackTrail.h"
 #include "CachedAttackData.h"
-#include "ActiveActor.h"
 #include "Havok/ActiveRagdoll.h"
 #include "Havok/ContactListener.h"
 #include "Offsets.h"
@@ -30,17 +30,19 @@ struct CameraShake
 		timer = length;
 	}
 
-	bool Update(float a_deltaTime) {
+	bool Update(float a_deltaTime)
+	{
 		currentValue = sinf((length - timer) * frequency) * strength * fmax(length - (length - timer), 0.f);
 		timer -= a_deltaTime;
 
 		return timer > 0.f;
 	}
-	
-	inline float GetCurrentValue() const {
+
+	inline float GetCurrentValue() const
+	{
 		return currentValue;
 	}
-	
+
 private:
 	float currentValue = 0.f;
 	float timer = 0.f;
@@ -145,9 +147,11 @@ public:
 
 	bool CheckActorInCombat(RE::ActorHandle a_actorHandle);
 
+	[[nodiscard]] static bool HasJumpIframes(RE::Actor* a_actor);
+
 	[[nodiscard]] static float GetWeaponMeshLength(RE::NiAVObject* a_weaponNode);
 	[[nodiscard]] static float GetWeaponAttackLength(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_weaponNode, RE::TESObjectWEAP* a_weapon, std::optional<float> a_overrideLength = std::nullopt, float a_lengthMult = 1.f);
-	[[nodiscard]] static float GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, std::optional<float> a_overrideRadius = std::nullopt, float a_radiusMult = 1.f);
+	[[nodiscard]] static float GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, RE::TESObjectWEAP* a_weapon, std::optional<float> a_overrideRadius = std::nullopt, float a_radiusMult = 1.f);
 
 	[[nodiscard]] static const RE::hkpCapsuleShape* GetNodeCapsuleShape(RE::NiAVObject* a_node);
 	[[nodiscard]] static bool GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_node, std::optional<float> a_overrideLength, float a_lengthMult, std::optional<float> a_overrideRadius, float a_radiusMult, RE::hkVector4& a_outVertexA, RE::hkVector4& a_outVertexB, float& a_outRadius);
@@ -168,7 +172,7 @@ public:
 	static inline std::unordered_map<RE::ActorHandle, std::shared_ptr<ActiveActor>> activeActors{};
 
 	static inline Lock activeCollisionGroupsLock;
-	static inline std::unordered_set<uint16_t> activeCollisionGroups{};	
+	static inline std::unordered_set<uint16_t> activeCollisionGroups{};
 
 	static inline Lock hittableCharControllerGroupsLock;
 	static inline std::unordered_set<uint16_t> hittableCharControllerGroups{};
@@ -182,12 +186,14 @@ public:
 	static inline Lock activeRagdollsLock;
 	static inline std::unordered_map<RE::hkbRagdollDriver*, std::shared_ptr<ActiveRagdoll>> activeRagdolls{};
 	static inline std::unordered_set<RE::ActorHandle> activeActorsWithRagdolls{};
-	
+
 	static inline Lock pendingHitsLock;
 	static inline std::vector<PendingHit> pendingHits{};
-	
-	static inline Lock pendingRagdollsLock;
+
+	static inline Lock ragdollsToAddLock;
 	static inline std::unordered_set<RE::ActorHandle> ragdollsToAdd{};
+
+	static inline Lock ragdollsToRemoveLock;
 	static inline std::unordered_set<RE::ActorHandle> ragdollsToRemove{};
 
 	static inline Lock weaponMeshLengthLock;
@@ -220,7 +226,7 @@ public:
 	bool RemoveWeaponWeaponCollisionCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemoveCollisionFilterSetupCallback(SKSE::PluginHandle a_pluginHandle);
-	bool RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle);	
+	bool RemoveContactListenerCallback(SKSE::PluginHandle a_pluginHandle);
 	bool RemovePrecisionLayerSetupCallback(SKSE::PluginHandle a_pluginHandle);
 
 	[[nodiscard]] float GetAttackCollisionReach(RE::ActorHandle a_actorHandle, RequestedAttackCollisionType a_collisionType = RequestedAttackCollisionType::Default) const;
@@ -234,7 +240,7 @@ public:
 
 	[[nodiscard]] static bool IsActorDisabled(RE::ActorHandle a_actorHandle);
 	static bool ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable);
-	
+
 	[[nodiscard]] static bool IsRagdollAdded(RE::ActorHandle a_actorHandle);
 
 	[[nodiscard]] static RE::NiAVObject* GetOriginalFromClone(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_clone);
@@ -350,9 +356,8 @@ public:
 							if (!ragdoll) {
 								return;
 							}
-							
-							if (bHasHitstop || ragdoll->elapsedTime < Settings::fAddRagdollSettleTime)
-							{
+
+							if (bHasHitstop || ragdoll->elapsedTime < Settings::fAddRagdollSettleTime) {
 								ragdoll->impulseTime = Settings::fRagdollImpulseTime;
 								bDefer = true;
 							}
@@ -402,11 +407,12 @@ public:
 	{
 		RE::ActorHandle actorHandle;
 		CollisionDefinition collisionDefinition;
-		
+
 		DelayedAttackCollisionJob(float a_delay, RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition) :
 			DelayedJob(a_delay), actorHandle(a_actorHandle), collisionDefinition(a_collisionDefinition) {}
-		
-		virtual bool Run(float a_deltaTime) override {
+
+		virtual bool Run(float a_deltaTime) override
+		{
 			timeRemaining -= a_deltaTime;
 			if (timeRemaining > 0.f) {
 				return false;
@@ -415,13 +421,13 @@ public:
 			PrecisionHandler::GetSingleton()->AddAttackCollision(actorHandle, collisionDefinition);
 			return true;
 		}
-	};	
+	};
 
 	template <class T, typename... Args>
 	void QueuePrePhysicsJob(Args&&... args)
 	{
 		WriteLocker locker(prePhysicsStepJobsLock);
-		
+
 		static_assert(std::is_base_of<GenericJob, T>::value);
 		_prePhysicsStepJobs.push_back(std::make_unique<T>(std::forward<Args>(args)...));
 	}
@@ -430,7 +436,7 @@ public:
 	void QueueMainUpdateJob(Args&&... args)
 	{
 		WriteLocker locker(mainUpdateJobsLock);
-		
+
 		static_assert(std::is_base_of<GenericJob, T>::value);
 		_mainUpdateJobs.push_back(std::make_unique<T>(std::forward<Args>(args)...));
 	}
@@ -448,7 +454,7 @@ public:
 	void QueueDelayedJob(Args&&... args)
 	{
 		WriteLocker locker(delayedJobsLock);
-		
+
 		static_assert(std::is_base_of<DelayedJob, T>::value);
 		_delayedJobs.push_back(std::make_unique<T>(std::forward<Args>(args)...));
 	}
@@ -482,7 +488,7 @@ private:
 	std::unordered_map<SKSE::PluginHandle, CollisionFilterSetupCallback> collisionFilterSetupCallbacks;
 	std::unordered_map<SKSE::PluginHandle, ContactListenerCallback> contactListenerCallbacks;
 	std::unordered_map<SKSE::PluginHandle, PrecisionLayerSetupCallback> precisionLayerSetupCallbacks;
-	
+
 	mutable Lock prePhysicsStepJobsLock;
 	std::vector<std::unique_ptr<GenericJob>> _prePhysicsStepJobs;
 
@@ -494,5 +500,4 @@ private:
 
 	mutable Lock delayedJobsLock;
 	std::vector<std::unique_ptr<DelayedJob>> _delayedJobs;
-	
 };

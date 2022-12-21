@@ -11,7 +11,8 @@ struct TrailOverride
 		std::optional<RE::NiColorA> a_baseColorOverride,
 		std::optional<float> a_baseColorScaleMult,
 		std::optional<std::string> a_meshOverride) :
-		lifetimeMult(a_lifetimeMult), baseColorOverride(a_baseColorOverride), baseColorScaleMult(a_baseColorScaleMult), meshOverride(a_meshOverride)
+		lifetimeMult(a_lifetimeMult),
+		baseColorOverride(a_baseColorOverride), baseColorScaleMult(a_baseColorScaleMult), meshOverride(a_meshOverride)
 	{}
 
 	std::optional<float> lifetimeMult;
@@ -220,6 +221,7 @@ struct Settings
 	// Miscellaneous
 	static inline float fActiveActorDistance = 4000.f;
 	static inline bool bHookAIWeaponReach = true;
+	static inline float fAIWeaponReachOffset = 0.f;
 	static inline bool bDisableCharacterBumper = true;
 	static inline bool bUseRagdollCollisionWhenAllowed = true;
 
@@ -244,7 +246,7 @@ struct Settings
 	static inline float fBlendOutTime = 0.05f;
 	static inline float fGetUpBlendTime = 0.2f;
 	static inline bool bFadeInComputedWorldFromModel = true;
-	static inline bool bFadeOutComputedWorldFromModel = true;	
+	static inline bool bFadeOutComputedWorldFromModel = true;
 	static inline float fComputeWorldFromModelFadeInTime = 0.5f;
 	static inline float fComputeWorldFromModelFadeOutTime = 0.3f;
 	static inline bool bConvertHingeConstraintsToRagdollConstraints = true;
@@ -288,9 +290,9 @@ struct Settings
 	static inline RE::BSFixedString sPrecisionBodyLayerName = "L_PRECISION_BODY";
 	static inline RE::BSFixedString sPrecisionRecoilLayerName = "L_PRECISION_RECOIL";
 	static inline uint64_t iPrecisionAttackLayerBitfield = 0x7053341561B7EFF;  // same as L_WEAPON layer, but -biped_no_cc (layer 33) +self-collision (layer 56) +precision body (layer 57) +precision body_no_cc (layer 58)
-	static inline uint64_t iPrecisionBodyLayerBitfield = 0x100000040000000;      // only collide with precision attack (layer 56) and charcontroller (layer 30)
+	static inline uint64_t iPrecisionBodyLayerBitfield = 0x100000040000000;    // only collide with precision attack (layer 56) and charcontroller (layer 30)
 	static inline uint64_t iPrecisionRecoilLayerBitfield = 0x141A661F;         // only relevant layers
-	
+
 	static inline uint64_t iBipedLayerBitfield = 0x407BC01C037A8F;  // same as L_BIPED layer
 
 	static inline std::unordered_map<RE::BGSBodyPartData*, std::unordered_map<std::string, AttackDefinition>> attackRaceDefinitions;
@@ -305,7 +307,8 @@ struct Settings
 	static inline std::vector<TrailDefinition> trailDefinitionsAll;
 	static inline std::vector<std::pair<std::string, std::string>> attackEventPairs;
 	static inline std::unordered_map<RE::TESObjectWEAP*, float> weaponLengthOverrides;
-	
+	static inline std::unordered_map<RE::TESObjectWEAP*, float> weaponRadiusOverrides;
+
 	static inline std::unordered_set<RE::BGSMaterialType*> recoilMaterials;
 	static inline RE::BGSBodyPartData* defaultBodyPartData;
 	static inline std::string attackTrailMeshPath = "Effects/WeaponTrails/AttackTrail.nif";
@@ -328,12 +331,10 @@ struct Settings
 	static inline float defaultMeshLengthOneHandMace = 48.3f;
 	static inline float defaultMeshLengthTwoHandSword = 95.f;
 	static inline float defaultMeshLengthTwoHandAxe = 56.5f;
-	
+
 	static inline float cameraShakeRadiusSquared = 2000000.f;
 	static inline RE::NiPoint3 cameraShakeAxis = { 1.f, 0.f, 0.f };
 
 	static inline RE::TESGlobal* glob_nemesis = nullptr;
 	static inline RE::TESGlobal* glob_IFPVFirstPerson = nullptr;
 };
-
-

@@ -30,12 +30,12 @@ public:
 	CollisionLayer collisionLayer;
 	float actorScale = 1.f;
 
-	std::unordered_map<RE::NiAVObject*, RE::NiAVObject*> cloneToOriginalMap;	
+	std::unordered_map<RE::NiAVObject*, RE::NiAVObject*> cloneToOriginalMap;
 
 	AttackCollisions attackCollisions;
 
 	std::atomic<float> inCombat = 0.f;
-	
+
 	std::atomic<float> hitstop = 0.f;
 	std::atomic<float> driveToPoseHitstop = 0.f;
 	std::atomic<uint8_t> receivedHitstopCount = 0;

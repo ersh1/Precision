@@ -78,7 +78,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (hittingLayer == CollisionLayer::kPrecisionRecoil) {
 		// Recoil layer is only used for recoil, so disable contact
 		a_event.contactPointProperties->flags |= RE::hkContactPointMaterial::FlagEnum::kIsDisabled;
-		
+
 		if (auto attackerActor = attacker->As<RE::Actor>()) {
 			auto precisionHandler = PrecisionHandler::GetSingleton();
 			auto attackerHandle = attackerActor->GetHandle();
@@ -97,7 +97,6 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 								int32_t rightWeaponType = 0;
 								attackerActor->GetGraphVariableInt("iRightHandType", rightWeaponType);
 								if (rightWeaponType > 0 && rightWeaponType < 7) {  // 1h & 2h melee
-
 									RE::hkVector4 hkHitPos = a_event.contactPoint->position;
 
 									RE::hkVector4 pointVelocity = hittingRigidBody->motion.GetPointVelocity(hkHitPos);
@@ -134,7 +133,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 														precisionHandler->ApplyCameraShake(
 															Settings::fRecoilCameraShakeStrength, Settings::fRecoilCameraShakeDuration,
 															Settings::fRecoilCameraShakeFrequency, 0.f);
-													}										
+													}
 
 													// Queue a FX only hit so we get the impact vfx and sound. No damage etc
 													{
@@ -212,7 +211,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			RE::hkpShapeKey* hitBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx);
 			RE::hkpShapeKey hittingBodyShapeKey = hittingBodyShapeKeysPtr ? *hittingBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
 			RE::hkpShapeKey hitBodyShapeKey = hitBodyShapeKeysPtr ? *hitBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
-			
+
 			auto niSeparatingNormal = Utils::HkVectorToNiPoint(a_event.contactPoint->separatingNormal);
 			RE::NiPoint3 niHitVelocity = Utils::HkVectorToNiPoint(pointVelocity) * *g_worldScaleInverse;
 
@@ -235,7 +234,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (hitLayer == CollisionLayer::kProjectile) {
 		RE::hkVector4 projectileVelocity = hitRigidBody->motion.GetPointVelocity(hkHitPos);
 		if (!projectileVelocity.IsEqual(RE::hkVector4())) {  // projectile velocity is not zero
-			if (precisionHandler->weaponProjectileCollisionCallbacks.size() > 0) {			
+			if (precisionHandler->weaponProjectileCollisionCallbacks.size() > 0) {
 				RE::hkpShapeKey* hittingBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx ? 0 : 1);
 				RE::hkpShapeKey* hitBodyShapeKeysPtr = a_event.GetShapeKeys(hitBodyIdx);
 				RE::hkpShapeKey hittingBodyShapeKey = hittingBodyShapeKeysPtr ? *hittingBodyShapeKeysPtr : RE::HK_INVALID_SHAPE_KEY;
@@ -258,9 +257,9 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 				return;  // Disable weapon-moving projectile collisions
 			}
-		} 
+		}
 	}
-	
+
 	auto feetPosition = attackerActor->GetPositionZ();
 
 	if (!targetActor) {
@@ -304,7 +303,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 		// check ground shake
 		if (attackCollision->groundShake && fabs(feetPosition - niHitPos.z) < Settings::fGroundFeetDistanceThreshold) {
-			auto cameraPos = RE::PlayerCamera::GetSingleton()->cameraRoot->world.translate;		
+			auto cameraPos = RE::PlayerCamera::GetSingleton()->cameraRoot->world.translate;
 			auto distanceSquared = cameraPos.GetSquaredDistance(niHitPos);
 
 			precisionHandler->ApplyCameraShake(
@@ -328,7 +327,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (hitLayer == CollisionLayer::kCharController && target && target->formType == RE::FormType::ActorCharacter) {
 		if (targetActor) {
 			auto charController = targetActor->GetCharController();
-			if (charController) {	
+			if (charController) {
 				if (!PrecisionHandler::IsCharacterControllerHittable(charController)) {
 					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 					return;
@@ -352,7 +351,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		if (!bTargetIsPlayer) {
 			bTargetIsTeammate = Utils::IsPlayerTeammateOrSummon(targetActor);
 		}
-		
+
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsPlayer && bTargetIsTeammate) {
 			if (targetActor->GetActorRuntimeData().currentCombatTarget != attackerActor->GetHandle()) {
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
@@ -361,7 +360,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 
 		auto attackerCombatTarget = attackerActor->GetActorRuntimeData().currentCombatTarget;
-		
+
 		// don't let the player's teammates or summons hit the player
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
 			if (attackerCombatTarget != targetActorHandle) {
@@ -384,22 +383,28 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		}
 	}
 
+	if (targetActor && targetActor->IsGhost()) {
+		// skip hitting actors with iframes
+		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		if (Settings::bDebug && Settings::bDisplayIframeHits) {
+			constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+			DrawHandler::AddPoint(niHitPos, 1.f, blue);
+		}
+		return;
+	}
+
 	// jump iframes
-	if (Settings::bEnableJumpIframes && targetActor && Utils::GetBodyPartData(targetActor) == Settings::defaultBodyPartData) {  // do this only for humanoids
-		if (auto charController = targetActor->GetCharController()) {
-			if (charController->context.currentState == RE::hkpCharacterStateTypes::kJumping || charController->context.currentState == RE::hkpCharacterStateTypes::kInAir) {
-				if (auto hitNode = GetNiObjectFromCollidable(hitRigidBody->GetCollidable())) {
-					if (!Utils::IsNodeOrChildOfNode(hitNode, Settings::jumpIframeNode)) {
-						a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+	if (PrecisionHandler::HasJumpIframes(targetActor)) {
+		if (auto hitNode = GetNiObjectFromCollidable(hitRigidBody->GetCollidable())) {
+			if (!Utils::IsNodeOrChildOfNode(hitNode, Settings::jumpIframeNode)) {
+				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 
-						if (Settings::bDebug && Settings::bDisplayIframeHits) {
-							constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
-							DrawHandler::AddPoint(niHitPos, 1.f, blue);
-						}
-
-						return;
-					}
+				if (Settings::bDebug && Settings::bDisplayIframeHits) {
+					constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+					DrawHandler::AddPoint(niHitPos, 1.f, blue);
 				}
+
+				return;
 			}
 		}
 	}
@@ -407,7 +412,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	// disable physical collision with actor
 	if (targetActor || Settings::bDisablePhysicalCollisionOnHit) {
 		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
-	}	
+	}
 
 	// add to already hit refs so we don't hit the target again within the same attack
 	attackCollision->AddHitRef(target ? target->GetHandle() : RE::ObjectRefHandle(), targetActor ? FLT_MAX : Settings::fHitSameRefCooldown, targetActor ? true : false);

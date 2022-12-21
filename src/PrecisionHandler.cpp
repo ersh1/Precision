@@ -126,20 +126,19 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 					swingEvent = AttackDefinition::SwingEvent::kCastOKStop;
 				}
 				if ((bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWeaponSwing(actorHandle)) || (!bIsWPNSwingUnarmed && !HasStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle))) {
-					AttackDefinition attackDefinition;		
+					AttackDefinition attackDefinition;
 
 					std::optional<bool> bIsLeftSwing = std::nullopt;
 					if (!bIsWPNSwingUnarmed) {
 						bIsLeftSwing = a_event->tag == "weaponLeftSwing"sv;
 					}
 					if (GetAttackCollisionDefinition(actor, attackDefinition, bIsLeftSwing, swingEvent)) {
-
 						if (bIsWPNSwingUnarmed) {
 							SetStartedDefaultCollisionWithWPNSwingUnarmed(actorHandle);
 						} else {
 							SetStartedDefaultCollisionWithWeaponSwing(actorHandle);
 						}
-						
+
 						AddAttack(actor->GetHandle(), attackDefinition);
 					}
 				}
@@ -193,6 +192,7 @@ PrecisionHandler::EventResult PrecisionHandler::ProcessEvent(const RE::BSAnimati
 		}
 	case "Collision_AttackEnd"_h:
 	case "attackStop"_h:
+	case "staggerStart"_h:
 	case "Collision_Cancel"_h:
 		{
 			//ClearHitRefs(actor->GetHandle());
@@ -235,18 +235,20 @@ void PrecisionHandler::Update(float a_deltaTime)
 			pendingHit.Run();
 		}
 	}
-	
+
 	{
 		WriteLocker locker(pendingHitsLock);
 		pendingHits.clear();
 	}
-	
-	// update trails
-	for (auto& trail : _attackTrails) {
-		trail->Update(a_deltaTime);
-	}
 
-	std::erase_if(_attackTrails, [](std::shared_ptr<AttackTrail>& trail) { return !trail->bActive; });
+	// update trails
+	for (auto it = _attackTrails.begin(); it != _attackTrails.end();) {
+		if (!it->get()->Update(a_deltaTime)) {
+			it = _attackTrails.erase(it);
+		} else {
+			++it;
+		}
+	}
 
 	if (bCameraShakeActive) {
 		if (currentCameraShakeTimer > 0.f) {
@@ -279,24 +281,26 @@ void PrecisionHandler::ApplyHitImpulse(RE::ObjectRefHandle a_refHandle, RE::hkpR
 				if (actor->IsPlayerRef() && Utils::IsFirstPerson()) {
 					return;
 				}
-				
-				WriteLocker locker(pendingRagdollsLock);
-				ragdollsToAdd.emplace(actorHandle);
+
+				{
+					WriteLocker locker(ragdollsToAddLock);
+					ragdollsToAdd.emplace(actorHandle);
+				}
 
 				QueuePostHavokHitJob<DeferredImpulseJob>(a_refHandle, a_rigidBody, a_hitVelocity, a_hitPosition, a_impulseMult, a_bIsActiveRagdoll, a_bAttackerIsPlayer);
 
 				return;
 			}
 		}
-	}	
-	
+	}
+
 	// Apply linear impulse at the center of mass to all bodies within 3 ragdoll constraints
 	Utils::ForEachRagdollDriver(refr.get(), [=](RE::hkbRagdollDriver* driver) {
 		auto ragdoll = GetActiveRagdollFromDriver(driver);
 		if (!ragdoll) {
 			return;
 		}
-		
+
 		ragdoll->impulseTime = Settings::fRagdollImpulseTime;
 
 		Utils::ForEachAdjacentBody(driver, a_rigidBody, [=](RE::hkpRigidBody* adjacentBody) {
@@ -363,7 +367,7 @@ void PrecisionHandler::ApplyCameraShake(float a_strength, float a_length, float 
 			strengthMult = 1 - (a_distanceSquared / Settings::cameraShakeRadiusSquared);
 		}
 		a_strength *= strengthMult;
-	}	
+	}
 
 	if (a_strength > 0.f) {
 		if (currentCameraShakeStrength / a_strength < 0.8f) {
@@ -381,9 +385,9 @@ bool PrecisionHandler::CalculateHitImpulse(RE::hkpRigidBody* a_rigidBody, const 
 	if (a_rigidBody->motion.type == RE::hkpMotion::MotionType::kKeyframed) {
 		return false;
 	}
-	
+
 	float massInv = a_rigidBody->motion.inertiaAndMassInv.quad.m128_f32[3];
-	float mass = massInv <= 0.001f ? 99999.f : 1.f / massInv;	
+	float mass = massInv <= 0.001f ? 99999.f : 1.f / massInv;
 
 	float impulseStrength = std::clamp(
 		Settings::fHitImpulseBaseStrength + Settings::fHitImpulseProportionalStrength * powf(mass, Settings::fHitImpulseMassExponent),
@@ -412,15 +416,15 @@ bool PrecisionHandler::CalculateHitImpulse(RE::hkpRigidBody* a_rigidBody, const 
 	}
 
 	float globalTimeMultiplier = *g_globalTimeMultiplier;
-	
+
 	if (a_bAttackerIsPlayer) {
 		globalTimeMultiplier *= Utils::GetPlayerTimeMultiplier();
 	}
-	
+
 	if (globalTimeMultiplier <= 0.f) {
 		globalTimeMultiplier = 1.f;
 	}
-	
+
 	impulseSpeed = fmin(impulseSpeed, (Settings::fHitImpulseMaxVelocity / globalTimeMultiplier));  // limit the imparted velocity to some reasonable value
 	a_outImpulse *= impulseSpeed * *g_worldScale * mass;                                           // This impulse will give the object the exact velocity it is hit with
 	a_outImpulse *= impulseStrength;                                                               // Scale the velocity as we see fit
@@ -447,7 +451,7 @@ bool PrecisionHandler::AddAttack(RE::ActorHandle a_actorHandle, const AttackDefi
 	if (!actor) {
 		return false;
 	}
-	
+
 	if (auto activeActor = GetActiveActor(a_actorHandle)) {
 		for (auto& collisionDef : a_attackDefinition.collisions) {
 			if (collisionDef.delay) {
@@ -501,7 +505,7 @@ bool PrecisionHandler::RemoveAttackCollision(RE::ActorHandle a_actorHandle, cons
 	if (auto activeActor = GetActiveActor(a_actorHandle)) {
 		return activeActor->attackCollisions.RemoveAttackCollision(a_collisionDefinition);
 	}
-	
+
 	return false;
 }
 
@@ -601,7 +605,7 @@ bool PrecisionHandler::HasHitstop(RE::ActorHandle a_actorHandle)
 bool PrecisionHandler::HasActiveImpulse(RE::ActorHandle a_actorHandle)
 {
 	bool bHasImpulse = false;
-	
+
 	auto actor = a_actorHandle.get();
 	if (actor) {
 		Utils::ForEachRagdollDriver(actor.get(), [&](RE::hkbRagdollDriver* a_driver) {
@@ -729,23 +733,23 @@ void PrecisionHandler::Clear()
 		WriteLocker locker(activeActorsLock);
 		activeActors.clear();
 	}
-	
+
 	{
 		WriteLocker locker(hittableCharControllerGroupsLock);
 		hittableCharControllerGroups.clear();
 	}
-	
+
 	{
 		WriteLocker locker(disabledActorsLock);
 		disabledActors.clear();
 	}
-	
+
 	{
 		WriteLocker locker(activeRagdollsLock);
 		activeRagdolls.clear();
 		activeActorsWithRagdolls.clear();
 	}
-	
+
 	{
 		WriteLocker locker(ragdollCollisionGroupsLock);
 		ragdollCollisionGroups.clear();
@@ -757,12 +761,13 @@ void PrecisionHandler::Clear()
 	}
 
 	{
-		WriteLocker locker(pendingRagdollsLock);
+		WriteLocker locker(ragdollsToAddLock);
+		WriteLocker locker2(ragdollsToRemoveLock);
 		ragdollsToAdd.clear();
 		ragdollsToRemove.clear();
 	}
-	
-	_attackTrails.clear();	
+
+	_attackTrails.clear();
 
 	PrecisionHandler::contactListener = ContactListener{};
 
@@ -776,7 +781,6 @@ void PrecisionHandler::OnPreLoadGame()
 
 void PrecisionHandler::OnPostLoadGame()
 {
-	
 }
 
 void PrecisionHandler::ProcessPrePhysicsStepJobs()
@@ -864,9 +868,9 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 			definitionsMap = &Settings::attackAnimationDefinitionsCastOKStop;
 			break;
 		}
-		
+
 		auto search = definitionsMap->find(projectNameStr);
-		
+
 		if (search != definitionsMap->end()) {
 			auto& attackDefinitions = search->second;
 
@@ -910,7 +914,7 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 	}
 
 	auto search = definitionsMap->find(bodyPartData);
-	
+
 	if (search == definitionsMap->end()) {
 		return false;
 	}
@@ -997,7 +1001,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 		yString.remove_prefix(std::min(yString.find_first_not_of(" "), yString.size()));
 		auto zString = a_parameter.substr(ysplit, end - ysplit - 1);
 		zString.remove_prefix(std::min(zString.find_first_not_of(" "), zString.size()));
-		
+
 		auto result = std::from_chars(xString.data(), xString.data() + xString.size(), a_outNiPoint3.x);
 		if (result.ec != std::errc()) {
 			return false;
@@ -1024,7 +1028,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 		bString.remove_prefix(std::min(bString.find_first_not_of(" "), bString.size()));
 		auto aString = a_parameter.substr(bsplit, end - bsplit - 1);
 		aString.remove_prefix(std::min(aString.find_first_not_of(" "), aString.size()));
-		
+
 		auto result = std::from_chars(rString.data(), rString.data() + rString.size(), a_outNiColorA.red);
 		if (result.ec != std::errc()) {
 			return false;
@@ -1303,7 +1307,20 @@ bool PrecisionHandler::CheckActorInCombat(RE::ActorHandle a_actorHandle)
 	if (auto actor = a_actorHandle.get()) {
 		return actor->IsInCombat();
 	}
-	
+
+	return false;
+}
+
+bool PrecisionHandler::HasJumpIframes(RE::Actor* a_actor)
+{
+	if (Settings::bEnableJumpIframes && a_actor && !a_actor->IsInRagdollState() && Utils::GetBodyPartData(a_actor) == Settings::defaultBodyPartData) {  // do this only for humanoids
+		if (auto charController = a_actor->GetCharController()) {
+			if (charController->context.currentState == RE::hkpCharacterStateTypes::kJumping || charController->context.currentState == RE::hkpCharacterStateTypes::kInAir) {
+				return true;
+			}
+		}
+	}
+
 	return false;
 }
 
@@ -1324,7 +1341,7 @@ float PrecisionHandler::GetWeaponAttackLength(RE::ActorHandle a_actorHandle, RE:
 	if (!actor) {
 		return Settings::fMinWeaponLength * GetAttackLengthMult(nullptr) * a_lengthMult;
 	}
-	
+
 	float length = 0.f;
 	if (a_overrideLength) {
 		length = *a_overrideLength;
@@ -1341,17 +1358,17 @@ float PrecisionHandler::GetWeaponAttackLength(RE::ActorHandle a_actorHandle, RE:
 		}
 
 		float mult = GetAttackLengthMult(actor.get()) * a_lengthMult;
-		
+
 		return fmax(length * mult, Settings::fMinWeaponLength * mult);
 	}
-	
+
 	return Settings::fMinWeaponLength * GetAttackLengthMult(actor.get()) * a_lengthMult;
 }
 
-float PrecisionHandler::GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, std::optional<float> a_overrideRadius /*= std::nullopt*/, float a_radiusMult /*= 1.f*/)
+float PrecisionHandler::GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, RE::TESObjectWEAP* a_weapon, std::optional<float> a_overrideRadius /*= std::nullopt*/, float a_radiusMult /*= 1.f*/)
 {
 	float radius = Settings::fWeaponCapsuleRadius;
-	
+
 	auto actor = a_actorHandle.get();
 	if (!actor) {
 		return radius;
@@ -1359,8 +1376,14 @@ float PrecisionHandler::GetWeaponAttackRadius(RE::ActorHandle a_actorHandle, std
 
 	if (a_overrideRadius) {
 		radius = *a_overrideRadius;
+	} else {
+		// search overrides
+		auto search = Settings::weaponRadiusOverrides.find(a_weapon);
+		if (search != Settings::weaponRadiusOverrides.end()) {
+			radius = search->second;
+		}
 	}
-	
+
 	// apply actor scale
 	radius *= actor->GetScale();
 
@@ -1385,7 +1408,7 @@ const RE::hkpCapsuleShape* PrecisionHandler::GetNodeCapsuleShape(RE::NiAVObject*
 			}
 		}
 	}
-	
+
 	return nullptr;
 }
 
@@ -1406,7 +1429,7 @@ bool PrecisionHandler::GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE
 		a_outVertexB = capsuleShape->vertexB;
 		a_outRadius = capsuleShape->radius;
 	}
-	
+
 	if (a_overrideRadius) {
 		radius = *a_overrideRadius * *g_worldScale;
 	} else {
@@ -1415,8 +1438,8 @@ bool PrecisionHandler::GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE
 
 	float originalLength = a_outVertexA.GetDistance3(a_outVertexB);
 	originalLength = fmax(radius * 2.f, length);
-	length = originalLength;	
-	
+	length = originalLength;
+
 	float finalRadiusMult = a_radiusMult;
 	float finalLengthMult = a_lengthMult;
 
@@ -1446,7 +1469,7 @@ bool PrecisionHandler::GetNodeAttackDimensions(RE::ActorHandle a_actorHandle, RE
 float PrecisionHandler::GetAttackLengthMult(RE::Actor* a_actor)
 {
 	float mult = Settings::fWeaponLengthMult;
-	
+
 	if (a_actor) {
 		if (a_actor->IsPlayerRef()) {
 			mult *= Settings::fPlayerAttackLengthMult;
@@ -1485,13 +1508,14 @@ bool PrecisionHandler::GetInventoryWeaponReach(RE::Actor* a_actor, RE::TESBoundO
 				float forwardOffset = currentProcess->cachedValues->cachedForwardLength;
 				float scale = a_actor->GetScale();
 				if (!a_object || a_object == g_unarmedWeapon) {
-					a_outReach = ((Settings::fMinWeaponLength - Settings::fWeaponLengthUnarmedOffset) * GetAttackLengthMult(a_actor) * scale) + forwardOffset;
+					float lengthMult = GetAttackLengthMult(a_actor) * scale;
+					a_outReach = (Settings::fMinWeaponLength + Settings::fWeaponLengthUnarmedOffset + Settings::fAIWeaponReachOffset) * lengthMult + forwardOffset;
 					return true;
 				} else if (auto weapon = a_object->As<RE::TESObjectWEAP>()) {
 					if (weapon->IsMelee()) {
 						if (PrecisionHandler::TryGetCachedWeaponMeshReach(a_actor, weapon, a_outReach)) {
 							float lengthMult = GetAttackLengthMult(a_actor) * scale;
-							a_outReach = fmax(a_outReach, Settings::fMinWeaponLength) * lengthMult + forwardOffset;
+							a_outReach = (fmax(a_outReach, Settings::fMinWeaponLength) + Settings::fAIWeaponReachOffset) * lengthMult + forwardOffset;
 							return true;
 						}
 					}
@@ -1506,19 +1530,19 @@ bool PrecisionHandler::GetInventoryWeaponReach(RE::Actor* a_actor, RE::TESBoundO
 std::shared_ptr<ActiveRagdoll> PrecisionHandler::GetActiveRagdollFromDriver(RE::hkbRagdollDriver* a_driver)
 {
 	ReadLocker locker(activeRagdollsLock);
-	
+
 	auto search = activeRagdolls.find(a_driver);
 	if (search != activeRagdolls.end()) {
 		return search->second;
 	}
-	
+
 	return nullptr;
 }
 
 void PrecisionHandler::CacheWeaponMeshReach(RE::TESObjectWEAP* a_weapon, RE::NiAVObject* a_object)
 {
 	WriteLocker locker(PrecisionHandler::weaponMeshLengthLock);
-	
+
 	if (!weaponMeshLengthMap.contains(a_weapon)) {
 		weaponMeshLengthMap.try_emplace(a_weapon, GetWeaponMeshLength(a_object));
 	}
@@ -1545,11 +1569,11 @@ bool PrecisionHandler::TryGetCachedWeaponMeshReach(RE::Actor* a_actor, RE::TESOb
 
 	{
 		ReadLocker locker(PrecisionHandler::weaponMeshLengthLock);
-		
+
 		auto search = weaponMeshLengthMap.find(a_weapon);
 		if (search != weaponMeshLengthMap.end()) {
 			a_outReach = search->second * a_actor->GetScale();
-			
+
 			return true;
 		}
 	}
@@ -1558,14 +1582,14 @@ bool PrecisionHandler::TryGetCachedWeaponMeshReach(RE::Actor* a_actor, RE::TESOb
 	auto search = Settings::weaponLengthOverrides.find(a_weapon);
 	if (search != Settings::weaponLengthOverrides.end()) {
 		float reach = search->second;
-		
+
 		{
 			WriteLocker locker(PrecisionHandler::weaponMeshLengthLock);
 			weaponMeshLengthMap.emplace(a_weapon, reach);
 		}
-		
-		a_outReach = reach * a_actor->GetScale();	
-		
+
+		a_outReach = reach * a_actor->GetScale();
+
 		return true;
 	}
 
@@ -1579,7 +1603,7 @@ bool PrecisionHandler::TryGetCachedWeaponMeshReach(RE::Actor* a_actor, RE::TESOb
 					WriteLocker locker(PrecisionHandler::weaponMeshLengthLock);
 					weaponMeshLengthMap.emplace(a_weapon, reach);
 				}
-				
+
 				a_outReach = reach * a_actor->GetScale();
 				return true;
 			}
@@ -1850,11 +1874,11 @@ float PrecisionHandler::GetAttackCollisionReach(RE::ActorHandle a_actorHandle, R
 				length = GetWeaponAttackLength(a_actorHandle, weaponNode, weapon);
 			}
 		}
-		
+
 		if (length == 0.f) {
 			length = Actor_GetReach(actor.get());
 		}
-	}	
+	}
 
 	return length;
 }
@@ -1921,7 +1945,7 @@ bool PrecisionHandler::IsActorDisabled(RE::ActorHandle a_actorHandle)
 bool PrecisionHandler::ToggleDisableActor(RE::ActorHandle a_actorHandle, bool a_bDisable)
 {
 	WriteLocker locker(disabledActorsLock);
-	
+
 	if (a_bDisable) {
 		auto [iter, bSuccess] = disabledActors.emplace(a_actorHandle);
 		return bSuccess;

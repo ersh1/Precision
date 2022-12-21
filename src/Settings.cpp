@@ -160,7 +160,7 @@ void Settings::ReadSettings()
 			auto groundShakeTbl = a_collisionTable["GroundShake"].as_table();
 			if (groundShakeTbl) {
 				groundShake = RE::NiPoint3();
-				
+
 				auto strength = groundShakeTbl->get("Strength");
 				if (strength) {
 					groundShake->x = *strength->value<float>();
@@ -233,7 +233,7 @@ void Settings::ReadSettings()
 												auto collisionArr = attackTbl["Collisions"].as_array();
 												if (collisionArr) {
 													std::vector<CollisionDefinition> collisionDefs{};
-													
+
 													for (auto&& collisionEntry : *collisionArr) {
 														readCollision(*collisionEntry.as_table(), collisionDefs);
 													}
@@ -262,12 +262,12 @@ void Settings::ReadSettings()
 					}
 				}
 			}
-			
+
 			auto attackAnimationDefinitionsArr = tbl.get_as<toml::array>("AttackAnimationDefinitions");
 			if (attackAnimationDefinitionsArr) {
 				for (auto&& elem : *attackAnimationDefinitionsArr) {
 					auto& attackAnimationDefinitionsTbl = *elem.as_table();
-										
+
 					auto projectNames = attackAnimationDefinitionsTbl["ProjectNames"].as_array();
 					if (projectNames) {
 						for (auto& projectNameEntry : *projectNames) {
@@ -309,7 +309,7 @@ void Settings::ReadSettings()
 													swingEvent = AttackDefinition::SwingEvent::kCastOKStop;
 												}
 											}
-											
+
 											// read collision
 											auto collisionArr = attackTbl["Collisions"].as_array();
 											if (collisionArr) {
@@ -378,7 +378,7 @@ void Settings::ReadSettings()
 							}
 						}
 					}
-					
+
 					// weapon keywords
 					std::vector<std::string> weaponKeywords;
 					bool bHasWeaponKeyword = false;
@@ -420,7 +420,7 @@ void Settings::ReadSettings()
 							}
 						}
 					}
-					
+
 					// effect keywords
 					std::vector<std::string> effectKeywords;
 					bool bHasEffectKeyword = false;
@@ -442,7 +442,7 @@ void Settings::ReadSettings()
 					if (effectShadersArr) {
 						for (auto& effectShadersEntry : *effectShadersArr) {
 							auto& effectShaderTbl = *effectShadersEntry.as_table();
-							
+
 							auto formID = effectShaderTbl["FormID"].value<RE::FormID>();
 							auto pluginName = effectShaderTbl["Plugin"].value<std::string_view>();
 
@@ -455,15 +455,14 @@ void Settings::ReadSettings()
 					}
 
 					if (bHasWeaponName || bHasWeaponKeyword || bHasEnchantmentName || bHasEffectName || bHasEffectKeyword || bHasEffectShader) {
-
 						TrailOverride trailOverride{};
 
 						// visuals
 						auto& trailVisualsTbl = *trailDefinitionTbl["Visuals"].as_table();
-						
+
 						// lifetime mult
 						trailOverride.lifetimeMult = trailVisualsTbl["LifetimeMult"].value<float>();
-						
+
 						const auto fillColor = [&](const toml::table* a_table, RE::NiColorA& a_outColor) {
 							if (a_table) {
 								auto r = a_table->get("r");
@@ -494,11 +493,11 @@ void Settings::ReadSettings()
 
 						// base color scale mult
 						trailOverride.baseColorScaleMult = trailVisualsTbl["BaseColorScaleMult"].value<float>();
-						
+
 						// trail mesh override
 						auto trailMeshOverrideVal = trailVisualsTbl["TrailMeshOverride"].value<std::string_view>();
 						if (trailMeshOverrideVal) {
-							trailOverride.meshOverride = *trailMeshOverrideVal;							
+							trailOverride.meshOverride = *trailMeshOverrideVal;
 						}
 
 						std::vector<TrailDefinition>* trailDefinitions = nullptr;
@@ -507,12 +506,12 @@ void Settings::ReadSettings()
 						} else {
 							trailDefinitions = &trailDefinitionsAny;
 						}
-						
+
 						trailDefinitions->emplace_back(priority, bHasWeaponName ? std::optional(weaponNames) : std::nullopt, bHasWeaponKeyword ? std::optional(weaponKeywords) : std::nullopt, bHasEnchantmentName ? std::optional(enchantmentNames) : std::nullopt, bHasEffectName ? std::optional(effectNames) : std::nullopt, bHasEffectKeyword ? std::optional(effectKeywords) : std::nullopt, bHasEffectShader ? std::optional(effectShaders) : std::nullopt, trailOverride);
 					}
 				}
 			}
-			
+
 			auto attackEventPairArr = tbl.get_as<toml::array>("AttackEventPair");
 			if (attackEventPairArr) {
 				for (auto&& elem : *attackEventPairArr) {
@@ -525,12 +524,12 @@ void Settings::ReadSettings()
 				}
 			}
 
-			auto weaponLengthOverrideArr = tbl.get_as<toml::array>("WeaponLengthOverride");
-			if (weaponLengthOverrideArr) {
-				for (auto&& elem : *weaponLengthOverrideArr) {
-					auto& weaponLengthOverrideTbl = *elem.as_table();
+			auto weaponOverrideArr = tbl.get_as<toml::array>("WeaponOverride");
+			if (weaponOverrideArr) {
+				for (auto&& elem : *weaponOverrideArr) {
+					auto& weaponOverrideTbl = *elem.as_table();
 
-					auto weaponEntryTblPtr = weaponLengthOverrideTbl.get_as<toml::table>("Weapon");
+					auto weaponEntryTblPtr = weaponOverrideTbl.get_as<toml::table>("Weapon");
 					if (weaponEntryTblPtr) {
 						auto& weaponEntryTbl = *weaponEntryTblPtr;
 						auto formID = weaponEntryTbl["FormID"].value<RE::FormID>();
@@ -538,15 +537,18 @@ void Settings::ReadSettings()
 
 						auto weapon = dataHandler->LookupForm<RE::TESObjectWEAP>(*formID, *pluginName);
 						if (weapon) {
-							auto lengthOverride = weaponLengthOverrideTbl["Length"].value<float>();
+							auto lengthOverride = weaponOverrideTbl["Length"].value<float>();
 							if (lengthOverride) {
 								weaponLengthOverrides.emplace(weapon, *lengthOverride);
+							}
+							auto radiusOverride = weaponOverrideTbl["Radius"].value<float>();
+							if (radiusOverride) {
+								weaponRadiusOverrides.emplace(weapon, *radiusOverride);
 							}
 						}
 					}
 				}
 			}
-
 		} catch (const toml::parse_error& e) {
 			std::ostringstream ss;
 			ss
@@ -576,6 +578,7 @@ void Settings::ReadSettings()
 	trailDefinitionsAll.clear();
 	attackEventPairs.clear();
 	weaponLengthOverrides.clear();
+	weaponRadiusOverrides.clear();
 
 	auto baseToml = std::filesystem::path(basecfg);
 	readToml(baseToml);
@@ -589,7 +592,7 @@ void Settings::ReadSettings()
 			}
 		}
 	}
-	
+
 	// sort trailDefinitions based on priority
 	std::sort(trailDefinitionsAny.begin(), trailDefinitionsAny.end(), [](const auto& a, const auto& b) {
 		return a.priority > b.priority;
@@ -699,6 +702,7 @@ void Settings::ReadSettings()
 		// Miscellaneous
 		ReadFloatSetting(mcm, "Miscellaneous", "fActiveActorDistance", fActiveActorDistance);
 		ReadBoolSetting(mcm, "Miscellaneous", "bHookAIWeaponReach", bHookAIWeaponReach);
+		ReadFloatSetting(mcm, "Miscellaneous", "fAIWeaponReachOffset", fAIWeaponReachOffset);
 		ReadBoolSetting(mcm, "Miscellaneous", "bDisableCharacterBumper", bDisableCharacterBumper);
 		ReadBoolSetting(mcm, "Miscellaneous", "bUseRagdollCollisionWhenAllowed", bUseRagdollCollisionWhenAllowed);
 

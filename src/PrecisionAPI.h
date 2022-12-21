@@ -75,7 +75,7 @@ namespace PRECISION_API
 		PrecisionLayerSetupCallbackReturn() :
 			precisionLayerType(PrecisionLayerType::None), layersToAdd(0), layersToRemove(0)
 		{}
-		
+
 		// which layer to alter
 		PrecisionLayerType precisionLayerType;
 
@@ -237,9 +237,8 @@ namespace PRECISION_API
 		/// <param name="a_myPluginHandle">Your assigned plugin handle</param>
 		/// <returns>OK, NotRegistered</returns>
 		virtual APIResult RemoveWeaponProjectileCollisionCallback(SKSE::PluginHandle a_myPluginHandle) noexcept = 0;
-		
-		[[deprecated("Use ApplyHitImpulse2 instead")]]
-		virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
+
+		[[deprecated("Use ApplyHitImpulse2 instead")]] virtual void ApplyHitImpulse(RE::ActorHandle a_actorHandle, RE::hkpRigidBody* a_rigidBody, const RE::NiPoint3& a_hitVelocity, const RE::hkVector4& a_hitPosition, float a_impulseMult) noexcept = 0;
 	};
 
 	class IVPrecision3 : public IVPrecision2
