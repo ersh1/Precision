@@ -151,41 +151,44 @@ bool AttackTrail::Update(float a_deltaTime)
 								segmentsToAddTrunc = trunc(segmentsToAdd);
 								segmentsToAddRemainder = segmentsToAdd - segmentsToAddTrunc;
 
-								// move the tail if expired
-								uint32_t segmentsToMove = 0;
-
-								for (uint32_t i = 0; i < std::max(currentBoneIdx, static_cast<uint32_t>(segmentTimestamps.size())); ++i) {
-									if (segmentTimestamps.size() > i && currentTime + currentTimeOffset > segmentTimestamps[i] + (Settings::fTrailSegmentLifetime * lifetimeMult)) {
-										++segmentsToMove;
-									} else {
-										break;
-									}
-								}
-
-								// check if there's gonna be enough bones left to add new segments, if not - forcibly move the tail, even if it's not expired yet
-								uint32_t totalSegments = currentBoneIdx + segmentsToAddTrunc - segmentsToMove;
-								if (totalSegments >= trailRootNode->children.size()) {
-									segmentsToMove += totalSegments - (trailRootNode->children.size() - 1);
-									uint32_t lastTimestamp = segmentTimestamps.size() - 1;
-									uint32_t timestampIdx = std::min(segmentsToMove, lastTimestamp);
-									currentTimeOffset = segmentTimestamps[timestampIdx] + (Settings::fTrailSegmentLifetime * lifetimeMult) - currentTime;
-								}
-
-								if (segmentsToMove > 0) {
-									segmentTimestamps.erase(segmentTimestamps.begin(), segmentTimestamps.begin() + segmentsToMove);
+								if (segmentTimestamps.size() > 0) {
+									// move the tail if expired
+									uint32_t segmentsToMove = 0;
 
 									for (uint32_t i = 0; i < currentBoneIdx; ++i) {
-										if (trailRootNode->children.size() > i + segmentsToMove) {
-											auto& segmentBone = trailRootNode->children[i];
-											auto& segmentToRead = trailRootNode->children[i + segmentsToMove];
-											if (segmentBone && segmentToRead) {
-												segmentBone->local = segmentToRead->local;
-											}
+										if (segmentTimestamps.size() > i && currentTime + currentTimeOffset > segmentTimestamps[i] + (Settings::fTrailSegmentLifetime * lifetimeMult)) {
+											++segmentsToMove;
+										} else {
+											break;
 										}
 									}
 
-									currentBoneIdx -= segmentsToMove;
-								}
+									// check if there's gonna be enough bones left to add new segments, if not - forcibly move the tail, even if it's not expired yet
+									uint32_t totalSegments = currentBoneIdx + segmentsToAddTrunc - segmentsToMove;
+									if (totalSegments >= trailRootNode->children.size()) {
+										segmentsToMove += totalSegments - (trailRootNode->children.size() - 1);
+										uint32_t timestampIdx = segmentTimestamps.size() > segmentsToMove ? segmentsToMove : segmentTimestamps.size() - 1;
+										currentTimeOffset = segmentTimestamps[timestampIdx] + (Settings::fTrailSegmentLifetime * lifetimeMult) - currentTime;
+									}
+
+									segmentsToMove = std::min(segmentsToMove, static_cast<uint32_t>(segmentTimestamps.size()));
+
+									if (segmentsToMove > 0) {
+										segmentTimestamps.erase(segmentTimestamps.begin(), segmentTimestamps.begin() + segmentsToMove);
+
+										for (uint32_t i = 0; i < currentBoneIdx; ++i) {
+											if (trailRootNode->children.size() > i + segmentsToMove) {
+												auto& segmentBone = trailRootNode->children[i];
+												auto& segmentToRead = trailRootNode->children[i + segmentsToMove];
+												if (segmentBone && segmentToRead) {
+													segmentBone->local = segmentToRead->local;
+												}
+											}
+										}
+
+										currentBoneIdx -= segmentsToMove;
+									}
+								}								
 
 								// add new segment(s)
 								if (segmentsToAdd > 0.f) {
