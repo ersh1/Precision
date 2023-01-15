@@ -142,18 +142,23 @@ namespace Hooks
 			//_Clone3D = TESObjectWEAPVtbl.write_vfunc(0x40, Clone3D);
 
 			REL::Relocation<std::uintptr_t> hook1{ RELOCATION_ID(43656, 44889) };  // 778290, 7A64E0
+			REL::Relocation<std::uintptr_t> hook2{ RELOCATION_ID(46018, 47279) };  // 7BAB40, 7E5800
 
 			auto& trampoline = SKSE::GetTrampoline();
 			_GetMaxRange = trampoline.write_call<5>(hook1.address() + RELOCATION_OFFSET(0x147, 0x128), GetMaxRange);  // 7783D7, 7A6608
+
+			_GetUnarmedReach = trampoline.write_call<5>(hook2.address() + 0x66, GetUnarmedReach);  // 7BABA6, 7E5866
 		}
 
 	private:
 		//static float GetMaxRange(RE::CombatInventoryItem* a_this);
 		static RE::NiAVObject* Clone3D(RE::TESObjectWEAP* a_this, RE::TESObjectREFR* a_ref, bool a_arg3);
 		static float GetMaxRange(RE::Actor* a_actor, RE::TESBoundObject* a_object, int64_t a3);
+		static float GetUnarmedReach(RE::Actor* a_actor);
 
 		static inline REL::Relocation<decltype(Clone3D)> _Clone3D;
 		static inline REL::Relocation<decltype(GetMaxRange)> _GetMaxRange;
+		static inline REL::Relocation<decltype(GetUnarmedReach)> _GetUnarmedReach;
 	};
 
 	class FirstPersonStateHook

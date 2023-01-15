@@ -62,6 +62,8 @@ AttackTrail::AttackTrail(RE::NiNode* a_node, RE::ActorHandle a_actorHandle, RE::
 							length = PrecisionHandler::GetWeaponMeshLength(weaponNode.get());
 						}
 
+						length *= collisionParentNode->local.scale;
+
 						scale = length * 0.01f;
 					}
 				}

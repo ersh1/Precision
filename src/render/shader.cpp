@@ -67,8 +67,6 @@ bool Render::Shader::Compile(const std::string& source, const std::string& entry
 		compileFlags, 0, binary.put(), errorBlob.put());
 
 	if (!SUCCEEDED(result)) {
-		if (errorBlob)
-			logger::error(static_cast<LPCSTR>(errorBlob->GetBufferPointer()));
 		return false;
 	}
 

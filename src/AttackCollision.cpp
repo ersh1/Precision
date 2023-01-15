@@ -55,6 +55,11 @@ AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionD
 						if (equippedWeapon) {
 							PrecisionHandler::TryGetCachedWeaponMeshReach(actor.get(), equippedWeapon, visualWeaponLength);
 						}
+
+						if (attackCollisionNode->parent) {
+							visualWeaponLength *= attackCollisionNode->parent->local.scale;
+						}
+
 						if (!visualWeaponLength) {
 							if (attackCollisionNode->parent && attackCollisionNode->parent->children.size() > 0) {
 								auto& weaponNode = attackCollisionNode->parent->children[0];

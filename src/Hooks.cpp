@@ -2135,4 +2135,23 @@ namespace Hooks
 
 		return _GetMaxRange(a_actor, a_object, a3);
 	}
+
+	float AIHooks::GetUnarmedReach(RE::Actor* a_actor)
+	{
+		if (Settings::bHookAIWeaponReach) {
+			if (a_actor) {
+				if (auto& currentProcess = a_actor->GetActorRuntimeData().currentProcess) {
+					if (currentProcess->cachedValues) {
+						float radius = currentProcess->cachedValues->cachedRadius / a_actor->GetScale();
+						float lengthMult = PrecisionHandler::GetAttackLengthMult(a_actor);
+						float reach = (Settings::fMinWeaponLength + Settings::fWeaponLengthUnarmedOffset + Settings::fAIWeaponReachOffset) * lengthMult + radius;
+						return std::fmin(reach, _GetUnarmedReach(a_actor));
+					}
+				}
+			}
+		}
+
+		return _GetUnarmedReach(a_actor);
+	}
+
 }

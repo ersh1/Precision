@@ -1352,6 +1352,10 @@ float PrecisionHandler::GetWeaponAttackLength(RE::ActorHandle a_actorHandle, RE:
 		}
 	}
 
+	if (a_weaponNode && a_weaponNode->parent) {
+		length *= a_weaponNode->parent->local.scale;
+	}
+
 	if (length > 0.f) {
 		if (actor->IsPlayerRef() && Utils::IsFirstPerson()) {
 			length = fmax(length + Settings::fFirstPersonAttackLengthOffset, 0.f);
@@ -1505,17 +1509,17 @@ bool PrecisionHandler::GetInventoryWeaponReach(RE::Actor* a_actor, RE::TESBoundO
 	if (a_actor) {
 		if (auto& currentProcess = a_actor->GetActorRuntimeData().currentProcess) {
 			if (currentProcess->cachedValues) {
-				float forwardOffset = currentProcess->cachedValues->cachedForwardLength;
+				float radius = currentProcess->cachedValues->cachedRadius;
 				float scale = a_actor->GetScale();
 				if (!a_object || a_object == g_unarmedWeapon) {
 					float lengthMult = GetAttackLengthMult(a_actor) * scale;
-					a_outReach = (Settings::fMinWeaponLength + Settings::fWeaponLengthUnarmedOffset + Settings::fAIWeaponReachOffset) * lengthMult + forwardOffset;
+					a_outReach = (Settings::fMinWeaponLength + Settings::fWeaponLengthUnarmedOffset + Settings::fAIWeaponReachOffset) * lengthMult + radius;
 					return true;
 				} else if (auto weapon = a_object->As<RE::TESObjectWEAP>()) {
 					if (weapon->IsMelee()) {
 						if (PrecisionHandler::TryGetCachedWeaponMeshReach(a_actor, weapon, a_outReach)) {
 							float lengthMult = GetAttackLengthMult(a_actor) * scale;
-							a_outReach = (fmax(a_outReach, Settings::fMinWeaponLength) + Settings::fAIWeaponReachOffset) * lengthMult + forwardOffset;
+							a_outReach = (fmax(a_outReach, Settings::fMinWeaponLength) + Settings::fAIWeaponReachOffset) * lengthMult + radius;
 							return true;
 						}
 					}

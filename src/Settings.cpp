@@ -40,7 +40,7 @@ void Settings::ReadSettings()
 
 	auto dataHandler = RE::TESDataHandler::GetSingleton();
 
-	const auto readCollision = [](const toml::v2::table& a_collisionTable, std::vector<CollisionDefinition>& a_collisionDefs) {
+	const auto readCollision = [](const toml::table& a_collisionTable, std::vector<CollisionDefinition>& a_collisionDefs) {
 		// node name
 		auto nodeName = a_collisionTable["NodeName"].value<std::string_view>();
 
@@ -549,13 +549,7 @@ void Settings::ReadSettings()
 					}
 				}
 			}
-		} catch (const toml::parse_error& e) {
-			std::ostringstream ss;
-			ss
-				<< "Error parsing file \'" << *e.source().path << "\':\n"
-				<< '\t' << e.description() << '\n'
-				<< "\t\t(" << e.source().begin << ')';
-			logger::error(ss.str());
+		} catch ([[maybe_unused]] const toml::parse_error& e) {
 			util::report_and_fail("Failed to load settings. This might be an indication of your game being unstable, try installing SSE Engine Fixes."sv);
 		} catch (const std::exception& e) {
 			util::report_and_fail(e.what());

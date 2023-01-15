@@ -138,7 +138,7 @@ extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::Interfa
 
 	auto api = Messaging::PrecisionInterface::GetSingleton();
 
-	logger::info("Precision::RequestPluginAPI called, InterfaceVersion {}", a_interfaceVersion);
+	logger::info("Precision::RequestPluginAPI called, InterfaceVersion {}", static_cast<uint8_t>(a_interfaceVersion) + 1);
 
 	switch (a_interfaceVersion) {
 	case PRECISION_API::InterfaceVersion::V1:
