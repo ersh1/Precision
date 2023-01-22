@@ -2117,6 +2117,17 @@ namespace Hooks
 		PrecisionHandler::GetSingleton()->RemoveAllAttackCollisions(RE::PlayerCharacter::GetSingleton()->GetHandle());
 	}
 
+	bool AIHooks::IsHuman(RE::Actor* a_actor)
+	{
+		if (auto race = a_actor->GetRace()) {
+			if (race->behaviorGraphProjectNames[0] == Settings::defaultMaleBehaviorGraph || race->behaviorGraphProjectNames[1] == Settings::defaultFemaleBehaviorGraph) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	RE::NiAVObject* AIHooks::Clone3D(RE::TESObjectWEAP* a_this, RE::TESObjectREFR* a_ref, bool a_arg3)
 	{
 		auto ret = _Clone3D(a_this, a_ref, a_arg3);
@@ -2126,7 +2137,7 @@ namespace Hooks
 
 	float AIHooks::GetMaxRange(RE::Actor* a_actor, RE::TESBoundObject* a_object, int64_t a3)
 	{
-		if (Settings::bHookAIWeaponReach) {
+		if (Settings::bHookAIWeaponReach && IsHuman(a_actor)) {
 			float reach = 0.f;
 			if (PrecisionHandler::GetInventoryWeaponReach(a_actor, a_object, reach)) {
 				return reach;
@@ -2138,7 +2149,7 @@ namespace Hooks
 
 	float AIHooks::GetUnarmedReach(RE::Actor* a_actor)
 	{
-		if (Settings::bHookAIWeaponReach) {
+		if (Settings::bHookAIWeaponReach && IsHuman(a_actor)) {
 			if (a_actor) {
 				if (auto& currentProcess = a_actor->GetActorRuntimeData().currentProcess) {
 					if (currentProcess->cachedValues) {

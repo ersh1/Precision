@@ -151,6 +151,8 @@ namespace Hooks
 		}
 
 	private:
+		static bool IsHuman(RE::Actor* a_actor);
+
 		//static float GetMaxRange(RE::CombatInventoryItem* a_this);
 		static RE::NiAVObject* Clone3D(RE::TESObjectWEAP* a_this, RE::TESObjectREFR* a_ref, bool a_arg3);
 		static float GetMaxRange(RE::Actor* a_actor, RE::TESBoundObject* a_object, int64_t a3);

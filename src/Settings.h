@@ -317,6 +317,9 @@ struct Settings
 	static inline RE::BSFixedString vanillaRecoilEvent = "recoilLargeStart";
 	static inline RE::BSFixedString jumpIframeNode = "NPC Spine2 [Spn2]";
 
+	static inline RE::BSFixedString defaultMaleBehaviorGraph = "DefaultMale";
+	static inline RE::BSFixedString defaultFemaleBehaviorGraph = "DefaultFemale";
+
 	static inline std::string bloodTrailMeshPath = "Effects/WeaponTrails/BloodHitHuman.nif";
 
 	static inline float fActiveDistanceHysteresis = 0.1f;
