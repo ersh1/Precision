@@ -321,7 +321,7 @@ namespace Utils
 		bool bIsGhost = actor->IsGhost();
 		bool bCheckJumpIframes = false;
 
-		constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+		const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
 
 		if (bIsGhost) {
 			a_color = blue;
@@ -338,7 +338,7 @@ namespace Utils
 			glm::vec4 nodeColor = a_color;
 			if (a_bCheckJumpIframes) {
 				if (!Utils::IsNodeOrChildOfNode(a_node, Settings::jumpIframeNode)) {
-					constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+					const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
 					nodeColor = blue;
 				}
 			}
@@ -518,7 +518,7 @@ namespace Utils
 
 	int GetAnimBoneIndex(RE::hkbCharacter* a_character, const RE::BSFixedString& a_boneName)
 	{
-		RE::hkaSkeleton* animSkeleton = a_character->setup->animationSkeleton.get();
+		const RE::hkaSkeleton* animSkeleton = a_character->setup->animationSkeleton.get();
 		for (int i = 0; i < animSkeleton->bones.size(); i++) {
 			const RE::hkaBone& bone = animSkeleton->bones[i];
 			if (bone.name.c_str() == a_boneName) {

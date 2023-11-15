@@ -163,47 +163,10 @@ namespace RE
 		WorldFromModelMode mode;    // 06
 	};
 
-	struct hkbCharacterData : hkReferencedObject
-	{
-		float unk10;
-		float unk14;
-		uint64_t unk18;
-		uint64_t unk20;
-		uint64_t unk28;
-		hkVector4 modelUpMS;                                            // 30
-		hkVector4 modelForwardMS;                                       // 40
-		hkVector4 modelRightMS;                                         // 50
-		hkArray<class hkbVariableInfo> characterPropertyInfos;          // 60
-		hkArray<int32_t> numBonesPerLod;                                // 70
-		hkRefPtr<hkbVariableValueSet> characterPropertyValues;          // 80
-		hkRefPtr<struct hkbFootIkDriverInfo> footIkDriverInfo;          // 88
-		hkRefPtr<struct hkbHandIkDriverInfo> handIkDriverInfo;          // 90
-		hkRefPtr<struct hkbCharacterStringData> stringData;             // 98
-		hkRefPtr<struct hkbMirroredSkeletonInfo> mirroredSkeletonInfo;  // A0
-		float m_scale;                                                  // A8
-		int16_t numHands;                                               // AC
-		int16_t numFloatSlots;                                          // AE
-	};
-	static_assert(sizeof(hkbCharacterData) == 0xB0);
-
 	class hkbEventInfo
 	{
 	public:
 		uint32_t flags;
-	};
-
-	class hkbCharacterSetup : hkReferencedObject
-	{
-	public:
-		hkArray<hkRefPtr<class hkaSkeletonMapper>> retargetingSkeletonMappers;  // 10
-		hkRefPtr<hkaSkeleton> animationSkeleton;                                // 20
-		hkRefPtr<hkaSkeletonMapper> ragdollToAnimationSkeletonMapper;           // 28
-		hkRefPtr<hkaSkeletonMapper> animationToRagdollSkeletonMapper;           // 30
-		hkRefPtr<struct hkbAnimationBindingSet> animationBindingSet;            // 38
-		hkRefPtr<hkbCharacterData> data;                                        // 40
-		uint64_t unk48;                                                         // probably either m_unscaledAnimationSkeleton or m_mirroredSkeleton
-		hkRefPtr<struct hkbSymbolIdMap> characterPropertyIdMap;                 // 50
-		mutable hkCriticalSection* criticalSection;                             // 58
 	};
 
 	class hkaBone

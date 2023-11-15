@@ -3,27 +3,6 @@
 #include "PrecisionAPI.h"
 #include "PrecisionHandler.h"
 
-namespace RE
-{
-	struct RE::BSAnimationUpdateData
-	{
-		float deltaTime;                            // 00
-		uint32_t pad04;                             // 04
-		void* unkFunctionPtr;                       // 08
-		TESObjectREFR* refr;                        // 10
-		NiPoint3* worldCameraPositionPtr;           // 18
-		IPostAnimationChannelUpdateFunctor* unk20;  // 20
-		uint16_t flags;                             // 28
-		bool unk2A;                                 // 2A
-		bool unk2B;                                 // 2B
-		bool unk2C;                                 // 2C
-		bool unk2D;                                 // 2D
-		bool unk2E;                                 // 2E
-		bool unk2F;                                 // 2F
-	};
-	static_assert(sizeof(BSAnimationUpdateData) == 0x30);
-}
-
 namespace Hooks
 {
 	class UpdateHooks

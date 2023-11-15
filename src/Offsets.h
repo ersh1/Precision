@@ -21,8 +21,6 @@ static void* g_unkCloneValue2 = (void*)RELOCATION_ID(501132, 359451).address(); 
 static uint32_t* g_unkCloneValue3 = (uint32_t*)RELOCATION_ID(523909, 410490).address();  // 3012500, 30AD080
 static char* g_unkCloneValue4 = (char*)RELOCATION_ID(511989, 388581).address();
 
-static RE::BSRenderManager* g_renderManager = (RE::BSRenderManager*)RELOCATION_ID(524907, 411393).address();
-
 static RE::BGSAttackData** g_defaultAttackData = (RE::BGSAttackData**)RELOCATION_ID(515609, 401780).address();  // 2F07FC0, 2FA26D0
 
 static float* g_currentCameraShakeStrength = (float*)RELOCATION_ID(516444, 402622).address();  // 2F251E0, 2FBF5D0

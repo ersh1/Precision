@@ -387,7 +387,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		// skip hitting actors with iframes
 		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 		if (Settings::bDebug && Settings::bDisplayIframeHits) {
-			constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+			const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
 			DrawHandler::AddPoint(niHitPos, 1.f, blue);
 		}
 		return;
@@ -400,7 +400,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
 
 				if (Settings::bDebug && Settings::bDisplayIframeHits) {
-					constexpr glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
+					const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
 					DrawHandler::AddPoint(niHitPos, 1.f, blue);
 				}
 

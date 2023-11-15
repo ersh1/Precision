@@ -155,8 +155,8 @@ void DrawHandler::DrawDebugPoint(const RE::NiPoint3& a_position, float a_duratio
 		return;
 	}
 
-	constexpr glm::vec3 offset1{ 0.005f, 0.005f, 0.f };
-	constexpr glm::vec3 offset2{ 0.005f, -0.005f, 0.f };
+	const glm::vec3 offset1{ 0.005f, 0.005f, 0.f };
+	const glm::vec3 offset2{ 0.005f, -0.005f, 0.f };
 
 	Render::Line line1(Render::Point(position - offset1, a_color), Render::Point(position + offset1, a_color), timestamp, a_duration);
 	Render::Line line2(Render::Point(position - offset2, a_color), Render::Point(position + offset2, a_color), timestamp, a_duration);
@@ -240,9 +240,9 @@ void DrawHandler::DrawDebugCapsule(const RE::NiPoint3& a_vertexA, const RE::NiPo
 
 	//draw bone axis
 	auto capsuleCenter = (a_vertexA + a_vertexB) / 2;
-	constexpr glm::vec4 xColor{ 1, 0, 0, 1 };
-	constexpr glm::vec4 yColor{ 0, 1, 0, 1 };
-	constexpr glm::vec4 zColor{ 0, 0, 1, 1 };
+	const glm::vec4 xColor{ 1, 0, 0, 1 };
+	const glm::vec4 yColor{ 0, 1, 0, 1 };
+	const glm::vec4 zColor{ 0, 0, 1, 1 };
 	DrawDebugLine(capsuleCenter, capsuleCenter + xAxis * 5.f, a_duration, xColor, a_drawOnTop);
 	DrawDebugLine(capsuleCenter, capsuleCenter + yAxis * 5.f, a_duration, yColor, a_drawOnTop);
 	DrawDebugLine(capsuleCenter, capsuleCenter + zAxis * 5.f, a_duration, zColor, a_drawOnTop);

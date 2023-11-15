@@ -846,7 +846,7 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 
 	// try finding a matching animation definition first
 	RE::BSFixedString projectName;
-	RE::hkStringPtr animName;
+	RE::hkStringPtr animName("");
 	float animTime;
 
 	if (Utils::GetActiveAnim(a_actor, projectName, animName, animTime)) {
@@ -963,7 +963,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 	auto parameters = Utils::Tokenize(payload.c_str(), '|');
 
 	if (parameters.empty()) {
-		logger::error("Invalid collision event: {}", a_event->tag);
+		logger::error("Invalid collision event: {}", a_event->tag.data());
 		return false;
 	}
 
@@ -1056,7 +1056,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseStringParameter(parameter, parsedString)) {
 					a_outCollisionDefinition.nodeName = parsedString;
 				} else {
-					logger::error("Invalid {} event payload - node name could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - node name could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1067,7 +1067,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseIntParameter(parameter, parsedInt)) {
 					a_outCollisionDefinition.ID = parsedInt;
 				} else {
-					logger::error("Invalid {} event payload - ID could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - ID could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1098,7 +1098,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.damageMult = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - damageMult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - damageMult could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1109,7 +1109,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.duration = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - duration could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - duration could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1120,7 +1120,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.capsuleRadius = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - radius could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - radius could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1131,7 +1131,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.radiusMult = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - radius mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - radius mult could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1142,7 +1142,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.capsuleLength = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - length could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - length could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1153,7 +1153,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseFloatParameter(parameter, parsedFloat)) {
 					a_outCollisionDefinition.lengthMult = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - length mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - length mult could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1170,7 +1170,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.transform->rotate.SetEulerAnglesXYZ(parsedNiPoint3);
 				} else {
-					logger::error("Invalid {} event payload - rotation could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - rotation could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1184,7 +1184,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.transform->translate = parsedNiPoint3;
 				} else {
-					logger::error("Invalid {} event payload - translation could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - translation could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1198,7 +1198,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.transform->scale = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - scale could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - scale could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1209,7 +1209,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 				if (parseNiPoint3Parameter(parameter, parsedNiPoint3)) {
 					a_outCollisionDefinition.groundShake = parsedNiPoint3;
 				} else {
-					logger::error("Invalid {} event payload - ground shake could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - ground shake could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1223,7 +1223,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.trailOverride->lifetimeMult = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - trail lifetime mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - trail lifetime mult could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1237,7 +1237,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.trailOverride->baseColorOverride = parsedNiColorA;
 				} else {
-					logger::error("Invalid {} event payload - trail base color override could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - trail base color override could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1252,7 +1252,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.trailOverride->baseColorScaleMult = parsedFloat;
 				} else {
-					logger::error("Invalid {} event payload - trail base color scale mult could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - trail base color scale mult could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1266,7 +1266,7 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 					}
 					a_outCollisionDefinition.trailOverride->meshOverride = parsedString;
 				} else {
-					logger::error("Invalid {} event payload - trail mesh override could not be parsed - {}.{}", a_event->tag, a_event->tag, a_event->payload);
+					logger::error("Invalid {} event payload - trail mesh override could not be parsed - {}.{}", a_event->tag.data(), a_event->tag.data(), a_event->payload.data());
 					return false;
 				}
 				break;
@@ -1277,19 +1277,19 @@ bool PrecisionHandler::ParseCollisionEvent(const RE::BSAnimationGraphEvent* a_ev
 	switch (a_eventType) {
 	case CollisionEventType::kAdd:
 		if (a_outCollisionDefinition.nodeName == ""sv) {
-			logger::error("Invalid Collision_Add event payload: node name is missing - {}.{}", a_event->tag, a_event->payload);
+			logger::error("Invalid Collision_Add event payload: node name is missing - {}.{}", a_event->tag.data(), a_event->payload.data());
 			return false;
 		}
 		break;
 	case CollisionEventType::kRemove:
 		if (a_outCollisionDefinition.nodeName == ""sv && !a_outCollisionDefinition.ID) {
-			logger::error("Invalid Collision_Remove event payload: node name and ID are missing - {}.{}", a_event->tag, a_event->payload);
+			logger::error("Invalid Collision_Remove event payload: node name and ID are missing - {}.{}", a_event->tag.data(), a_event->payload.data());
 			return false;
 		}
 		break;
 	case CollisionEventType::kClearTargets:
 		if (a_outCollisionDefinition.nodeName == "sv" && !a_outCollisionDefinition.ID) {
-			logger::error("Invalid Collision_ClearTargets event payload: node name and ID are missing - {}.{}", a_event->tag, a_event->payload);
+			logger::error("Invalid Collision_ClearTargets event payload: node name and ID are missing - {}.{}", a_event->tag.data(), a_event->payload.data());
 			return false;
 		}
 		break;

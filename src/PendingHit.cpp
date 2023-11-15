@@ -123,7 +123,7 @@ void PendingHit::Run()
 	CalculateCurrentHitTargetForWeaponSwing(attacker.get());  // call this for vanilla stuff, skipping the actual collision check thanks to the hook (the collision is active)
 
 	if (Settings::bDebug && Settings::bDisplayHitLocations) {
-		constexpr glm::vec4 red{ 1.0, 0.0, 0.0, 1.0 };
+		const glm::vec4 red{ 1.0, 0.0, 0.0, 1.0 };
 		DrawHandler::AddPoint(niHitPos, 1.f, red);
 	}
 
@@ -306,7 +306,7 @@ void PendingHit::Run()
 		}
 
 		if (Settings::bDebug && Settings::bDisplayHitNodeCollisions) {
-			constexpr glm::vec4 green{ 0.0, 1.0, 0.0, 1.0 };
+			const glm::vec4 green{ 0.0, 1.0, 0.0, 1.0 };
 
 			auto node = RE::NiPointer<RE::NiAVObject>(GetNiObjectFromCollidable(hitRigidBody->GetCollidable()));
 			DrawHandler::AddCollider(node, 1.f, green);
@@ -357,7 +357,7 @@ void PendingHit::RunFXOnly()
 	CalculateCurrentHitTargetForWeaponSwing(attacker.get());  // call this for vanilla stuff, skipping the actual collision check thanks to the hook (the collision is active)
 
 	if (Settings::bDebug && Settings::bDisplayRecoilCollisions) {
-		constexpr glm::vec4 recoilColor{ 1, 0, 1, 1 };
+		const glm::vec4 recoilColor{ 1, 0, 1, 1 };
 		DrawHandler::AddPoint(niHitPos, 2.f, recoilColor, true);
 	}
 

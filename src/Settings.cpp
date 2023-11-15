@@ -120,7 +120,7 @@ void Settings::ReadSettings()
 						a_outVector.y = *y->value<float>();
 					}
 					auto z = a_table->get("z");
-					if (x) {
+					if (z) {
 						a_outVector.z = *z->value<float>();
 					}
 				}

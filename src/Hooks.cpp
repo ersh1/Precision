@@ -1550,7 +1550,7 @@ namespace Hooks
 							for (auto constraint : a_driver->ragdoll->constraints) {
 								if (constraint->data->GetType() == RE::hkpConstraintData::ConstraintType::kRagdoll) {
 									RE::hkpRagdollConstraintData* data = static_cast<RE::hkpRagdollConstraintData*>(constraint->data);
-									if (constraint->constraintInternal) {  // needed to tell master from slave
+									if (constraint->internal) {  // needed to tell master from slave
 										RE::hkpRigidBody* bodyA = constraint->GetRigidBodyA();
 										RE::hkpRigidBody* bodyB = constraint->GetRigidBodyB();
 
@@ -1563,7 +1563,7 @@ namespace Hooks
 										RE::hkVector4 pivotB;
 										hkVector4_setTransformedPos(pivotB, bodyB->motion.motionState.transform, pivotBbodySpace);
 
-										RE::hkVector4 slavePivot = bodyA == constraint->constraintInternal->entities[1 - constraint->constraintInternal->whoIsMaster] ? pivotA : pivotB;
+										RE::hkVector4 slavePivot = bodyA == constraint->internal->entities[1 - constraint->internal->whoIsMaster] ? pivotA : pivotB;
 
 										SetPivotInWorldSpace(data, bodyA->motion.motionState.transform, bodyB->motion.motionState.transform, slavePivot);
 									}

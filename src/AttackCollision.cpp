@@ -487,8 +487,8 @@ uint32_t AttackCollision::GetDamagedCount() const
 bool AttackCollision::Update(float a_deltaTime)
 {
 	if (Settings::bDebug && Settings::bDisplayWeaponCapsule) {
-		constexpr glm::vec4 attackColor{ 1, 0, 0, 1 };
-		constexpr glm::vec4 recoilColor{ 0.2, 0.2, 0.8, 1 };
+		const glm::vec4 attackColor{ 1, 0, 0, 1 };
+		const glm::vec4 recoilColor{ 0.2, 0.2, 0.8, 1 };
 		Utils::DrawCollider(attackCollisionNode.get(), 0.f, attackColor);
 		Utils::DrawCollider(recoilCollisionNode.get(), 0.f, recoilColor);
 	}
