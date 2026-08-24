@@ -603,7 +603,9 @@ bool AttackCollision::CreateCollision(RE::bhkWorld* a_world, RE::Actor* a_actor,
 	uint32_t collisionFilterInfo = 0;
 
 	if (!Utils::GetActorCollisionFilterInfo(a_actor, collisionFilterInfo)) {
-		a_actor->GetCollisionFilterInfo(collisionFilterInfo);
+		RE::CFilter collisionFilterInfo_cf;
+a_actor->GetCollisionFilterInfo(collisionFilterInfo_cf);
+collisionFilterInfo = collisionFilterInfo_cf.filter;
 	}
 
 	uint16_t collisionGroup = collisionFilterInfo >> 16;

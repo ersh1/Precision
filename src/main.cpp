@@ -89,9 +89,9 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	v.PluginVersion(Plugin::VERSION);
 	v.PluginName(Plugin::NAME);
 	v.AuthorName("Ersh");
-	v.UsesAddressLibrary(true);
+	v.UsesAddressLibrary();
 	v.CompatibleVersions({ SKSE::RUNTIME_SSE_LATEST });
-	v.HasNoStructUse(true);
+	v.UsesNoStructs();
 
 	return v;
 }();
@@ -130,7 +130,7 @@ extern "C" DLLEXPORT void* SKSEAPI RequestPluginAPI(const PRECISION_API::Interfa
 	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)retAddr, &hModule);
 
 	if (hModule) {
-		SKSE::PluginVersionData* versionData = (SKSE::PluginVersionData*)SKSE::WinAPI::GetProcAddress(hModule, "SKSEPlugin_Version");
+		SKSE::PluginVersionData* versionData = (SKSE::PluginVersionData*)REX::W32::GetProcAddress(reinterpret_cast<REX::W32::HMODULE>(hModule), "SKSEPlugin_Version");
 		if (versionData && versionData->pluginName == "Accuracy"sv && versionData->pluginVersion < 0x20000) {
 			return nullptr;
 		}

@@ -425,7 +425,9 @@ namespace Hooks
 				uint32_t filterInfo = 0;
 				auto charController = actor->GetCharController();
 				if (charController) {
-					charController->GetCollisionFilterInfo(filterInfo);
+					RE::CFilter charFilter;
+					charController->GetCollisionFilterInfo(charFilter);
+					filterInfo = charFilter.filter;
 				}
 				uint16_t collisionGroup = filterInfo >> 16;
 
@@ -433,7 +435,14 @@ namespace Hooks
 
 				bool bIsActorDisabled = PrecisionHandler::IsActorDisabled(actorHandle);
 
-				bool bIsActorDead = actor->IsDead();
+				// Actor::IsDead() is a virtual call at a fixed index and reports living NPCs
+				// as dead on Skyrim 1.7.99 - measured on 26 of 28 live actors, all of them
+				// essential or protected, while a cow and a guard came back correct. That
+				// points at the a_notEssential parameter rather than a shifted vtable.
+				// GetLifeState() reads a bitfield member instead, with no vtable involved.
+				const auto lifeState = actor->AsActorState()->GetLifeState();
+				bool       bIsActorDead = lifeState == RE::ACTOR_LIFE_STATE::kDead ||
+					lifeState == RE::ACTOR_LIFE_STATE::kDying;
 
 				bool bShouldAddToWorld = !Settings::bDisableMod && !bIsActorDisabled && !bIsActorDead && actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) < startDistanceSq;
 				bool bShouldRemoveFromWorld = Settings::bDisableMod || bIsActorDisabled || bIsActorDead || actor->GetPosition().GetSquaredDistance(playerCharacter->GetPosition()) > endDistanceSq;
@@ -1168,7 +1177,7 @@ namespace Hooks
 									if (ragdollConstraint) {
 										constraint->RemoveFromCurrentWorld();
 
-										RE::bhkWorld* world = reinterpret_cast<RE::bhkWorld*>(wrapper->GetWorld2()->unk430);
+										RE::bhkWorld* world = reinterpret_cast<RE::bhkWorld*>(wrapper->GetWorld2()->userData);
 										ragdollConstraint->MoveToWorld(world);
 										unk = ragdollConstraint;
 									}
@@ -1999,8 +2008,16 @@ namespace Hooks
 			if (auto actor = a_actorHandle.get()) {
 				if (auto root = actor->Get3D(false)) {
 					auto rootNode = root->AsNode();
-					if (rootNode && actor->loadedData && actor->loadedData->unk58) {
-						auto pUnk58 = reinterpret_cast<Unk58**>(actor->loadedData->unk58);
+					// CommonLibSSE-NG covers 0x30..0x68 of LOADED_REF_DATA with the handleList
+					// arena, so the field the old headers called unk58 has no name any more.
+					// Same pointer, read by offset. Verified against CommonLibSSE-NG v3.7.0,
+					// where LOADED_REF_DATA had a raw uint64 at 0x58 and data3D at 0x68 - the
+					// byte layout is unchanged.
+					void* unk58 = rootNode && actor->loadedData ?
+						*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(actor->loadedData) + 0x58) :
+						nullptr;
+					if (unk58) {
+						auto pUnk58 = reinterpret_cast<Unk58**>(unk58);
 						if (auto unk58 = *pUnk58) {
 							if (auto skeleton = unk58->object) {
 								if (auto cell = actor->GetParentCell()) {
@@ -2021,7 +2038,9 @@ namespace Hooks
 											});
 
 											uint32_t collisionFilterInfo;
-											actor->GetCollisionFilterInfo(collisionFilterInfo);
+											RE::CFilter actorFilter;
+											actor->GetCollisionFilterInfo(actorFilter);
+											collisionFilterInfo = actorFilter.filter;
 											uint16_t collisionGroup = collisionFilterInfo >> 16;
 
 											CollisionLayer collisionLayer = CollisionLayer::kPrecisionBody;

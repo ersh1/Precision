@@ -79,7 +79,9 @@ bool ActiveActor::UpdateClone()
 
 	uint32_t filterInfo = 0;
 	if (!Utils::GetActorCollisionFilterInfo(actor.get(), filterInfo)) {
-		actor->GetCollisionFilterInfo(filterInfo);
+		RE::CFilter filterInfo_cf;
+actor->GetCollisionFilterInfo(filterInfo_cf);
+filterInfo = filterInfo_cf.filter;
 	}
 
 	uint16_t currentCollisionGroup = filterInfo >> 16;
@@ -112,8 +114,8 @@ bool ActiveActor::UpdateClone()
 			if (auto collidable = static_cast<RE::bhkCollisionObject*>(cloneNode->collisionObject.get())) {
 				if (auto worldObject = collidable->body.get()) {
 					if (auto hkpWorldObject = static_cast<RE::hkpWorldObject*>(worldObject->referencedObject.get())) {
-						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo &= (0x0000ffff);                                   // zero out collision group
-						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo |= (static_cast<uint32_t>(collisionGroup) << 16);  // set collision group to current
+						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo.filter &= (0x0000ffff);                                   // zero out collision group
+						hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo.filter |= (static_cast<uint32_t>(collisionGroup) << 16);  // set collision group to current
 					}
 				}
 			}
@@ -264,7 +266,7 @@ void ActiveActor::FillCloneMap(RE::NiAVObject* a_clone, RE::NiAVObject* a_origin
 				if (auto collidable = static_cast<RE::bhkCollisionObject*>(cloneChild->collisionObject.get())) {
 					if (auto worldObject = collidable->body.get()) {
 						if (auto hkpWorldObject = static_cast<RE::hkpWorldObject*>(worldObject->referencedObject.get())) {
-							auto& collisionFilterInfo = hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo;
+							auto& collisionFilterInfo = hkpWorldObject->collidable.broadPhaseHandle.collisionFilterInfo.filter;
 							CollisionLayer layer = static_cast<CollisionLayer>(collisionFilterInfo & 0x7f);
 
 							// remove children that have the char controller layer

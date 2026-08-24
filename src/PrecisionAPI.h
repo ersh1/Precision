@@ -374,8 +374,9 @@ namespace PRECISION_API
 	/// <returns>The pointer to the API singleton, or nullptr if request failed</returns>
 	[[nodiscard]] inline void* RequestPluginAPI(const InterfaceVersion a_interfaceVersion = InterfaceVersion::V4)
 	{
-		auto pluginHandle = GetModuleHandle("Precision.dll");
-		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)SKSE::WinAPI::GetProcAddress(pluginHandle, "RequestPluginAPI");
+		// SKSE::WinAPI was folded into REX::W32 in CommonLibSSE-NG 6.x.
+		auto pluginHandle = REX::W32::GetModuleHandleA("Precision.dll");
+		_RequestPluginAPI requestAPIFunction = (_RequestPluginAPI)REX::W32::GetProcAddress(pluginHandle, "RequestPluginAPI");
 		if (requestAPIFunction) {
 			return requestAPIFunction(a_interfaceVersion);
 		}

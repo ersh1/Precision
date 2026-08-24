@@ -294,7 +294,7 @@ inline static REL::Relocation<tActor_GetEquippedShield> Actor_GetEquippedShield{
 typedef RE::hkStringPtr* (*thkStringPtr_ctor)(RE::hkStringPtr*, const char*);
 static REL::Relocation<thkStringPtr_ctor> hkStringPtr_ctor{ RELOCATION_ID(56806, 57236) };  // 9CBA10, 9F0210
 
-typedef void (*thkpConvexVerticesShape_ctor)(RE::hkpConvexVerticesShape*, const RE::hkStridedVertices& a_vertices, const RE::hkpConvexVerticesShape::BuildConfig& a_buildConfig);
+typedef void (*thkpConvexVerticesShape_ctor)(RE::hkpConvexVerticesShape*, const RE::hkStridedVertices& a_vertices, const RE::hkpConvexVerticesShapeBuildConfig& a_buildConfig);
 static REL::Relocation<thkpConvexVerticesShape_ctor> hkpConvexVerticesShape_ctor{ RELOCATION_ID(78843, 80831) };  // E43640, E895C0
 //static REL::Relocation<thkpConvexVerticesShape_ctor> hkpConvexVerticesShape_ctor{ RELOCATION_ID(64063, 65089) };  // B5DDC0, B82F30
 
@@ -306,9 +306,6 @@ static REL::Relocation<tAIProcess_GetCurrentlyEquippedWeapon> AIProcess_GetCurre
 
 typedef void (*tPlayWaterImpact)(float a_worldBoundRadius, const RE::NiPoint3& a_position);
 static REL::Relocation<tPlayWaterImpact> PlayWaterImpact{ RELOCATION_ID(31297, 32081) };  // 4C09F0, 4DABB0
-
-typedef bool (*tBSSoundHandle_SetPosition)(RE::BSSoundHandle* a_this, float a_x, float a_y, float a_z);
-static REL::Relocation<tBSSoundHandle_SetPosition> BSSoundHandle_SetPosition{ RE::Offset::BSSoundHandle::SetPosition };
 
 typedef RE::NiAVObject*(__fastcall* tNiAVObject_LookupBoneNodeByName)(RE::NiAVObject* a_this, const RE::BSFixedString& a_name, bool a3);
 static REL::Relocation<tNiAVObject_LookupBoneNodeByName> NiAVObject_LookupBoneNodeByName{ RELOCATION_ID(74481, 76207) };

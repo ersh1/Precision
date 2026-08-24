@@ -1920,7 +1920,9 @@ bool PrecisionHandler::IsCharacterControllerHittable(RE::bhkCharacterController*
 {
 	if (a_controller) {
 		uint32_t filterInfo;
-		a_controller->GetCollisionFilterInfo(filterInfo);
+		RE::CFilter filterInfo_cf;
+a_controller->GetCollisionFilterInfo(filterInfo_cf);
+filterInfo = filterInfo_cf.filter;
 
 		return IsCharacterControllerHittableCollisionGroup(filterInfo >> 16);
 	}

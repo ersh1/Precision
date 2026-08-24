@@ -16,12 +16,6 @@ namespace RE
 		kDoActivate
 	};
 
-	class hkClass
-	{
-	public:
-		const char* name;
-	};
-
 	struct hkbGeneratorOutput
 	{
 		enum class StandardTracks
@@ -163,31 +157,6 @@ namespace RE
 		WorldFromModelMode mode;    // 06
 	};
 
-	class hkbEventInfo
-	{
-	public:
-		uint32_t flags;
-	};
-
-	class hkaBone
-	{
-	public:
-		hkStringPtr name;
-		bool lockTranslation;
-	};
-
-	class hkaSkeleton : hkReferencedObject
-	{
-	public:
-		hkStringPtr name;
-		hkArray<int16_t> parentIndices;
-		hkArray<hkaBone> bones;
-		hkArray<hkQsTransform> referencePose;
-		hkArray<float> referenceFloats;
-		hkArray<hkStringPtr> floatSlots;
-		hkArray<struct LocalFrameOnBone> localFrames;
-	};
-
 	class hkaSkeletonMapperData
 	{
 	public:
@@ -293,27 +262,6 @@ namespace RE
 		}
 	};
 
-	class hkMemoryRouter
-	{
-	public:
-		uint64_t unk00;             // 00
-		uint64_t unk08;             // 08
-		uint64_t unk10;             // 10
-		uint64_t unk18;             // 18
-		uint64_t unk20;             // 20
-		uint64_t unk28;             // 28
-		uint64_t unk30;             // 30
-		uint64_t unk38;             // 38
-		uint64_t unk40;             // 40
-		uint64_t unk48;             // 48
-		hkMemoryAllocator* temp;    // 50
-		hkMemoryAllocator* heap;    // 58
-		hkMemoryAllocator* debug;   // 60
-		hkMemoryAllocator* solver;  // 68
-		void* userData;             // 70
-	};
-	static_assert(offsetof(hkMemoryRouter, heap) == 0x58);
-
 	class bhkSphereRepShape : public bhkShape
 	{};
 
@@ -401,55 +349,20 @@ namespace RE
 	static_assert(offsetof(bhkRigidBodyCinfo, hkCinfo) == 0x30);
 	static_assert(sizeof(bhkRigidBodyCinfo) == 0x110);
 
-	class hkpSolverResults
+	// CommonLibSSE-NG defines hkpConvexVerticesShape itself, but not its BuildConfig,
+	// which thkpConvexVerticesShape_ctor in Offsets.h needs.
+	struct hkpConvexVerticesShapeBuildConfig
 	{
-	public:
-		float impulseApplied;
-		float internalSolverData;
+		bool createConnectivity;
+		bool shrinkByConvexRadius;
+		bool useOptimizedShrinking;
+		float convexRadius;
+		int32_t maxVertices;
+		float maxRelativeShrink;
+		float maxShrinkingVerticesDisplacement;
+		float maxCosAngleForBevelPlanes;
 	};
-
-	class hkContactPointMaterial
-	{
-	public:
-		enum FlagEnum
-		{
-			kIsNew = 1,
-			kUsesSolverPath2 = 2,
-			kBreakoffObjectID = 4,
-			kIsDisabled = 8
-		};
-
-		uint64_t userData;
-		hkUFloat8 friction;
-		uint8_t restitution;
-		hkUFloat8 maxImpulse;
-		uint8_t flags;
-	};
-
-	class hkpContactPointProperties : public hkpSolverResults, public hkContactPointMaterial
-	{
-		float internalDataA;
-	};
-
-	class hkpConvexVerticesShape : public hkpConvexShape
-	{
-	public:
-		struct BuildConfig
-		{
-			bool createConnectivity;
-			bool shrinkByConvexRadius;
-			bool useOptimizedShrinking;
-			float convexRadius;
-			int32_t maxVertices;
-			float maxRelativeShrink;
-			float maxShrinkingVerticesDisplacement;
-			float maxCosAngleForBevelPlanes;
-		};
-		static_assert(sizeof(BuildConfig) == 0x18);
-
-		uint64_t pad40[13];
-	};
-	static_assert(sizeof(hkpConvexVerticesShape) == 0x90);
+	static_assert(sizeof(hkpConvexVerticesShapeBuildConfig) == 0x18);
 
 	struct hkStridedVertices
 	{
@@ -480,24 +393,6 @@ namespace RE
 		}
 	};
 
-	struct hkbNodeInfo
-	{
-		void* unk00;            //00
-		int64_t unk08;          //08
-		int64_t unk10;          //10
-		void* unk18;            //18
-		char unk20[48];         //20
-		hkbNode* nodeTemplate;  //50
-		hkbNode* nodeClone;     //58
-		hkbNode* behavior;      //60
-		int64_t unk68;          //68
-		int64_t unk70;          //70
-		int64_t unk78;          //78
-		int64_t unk80;          //80
-		bool unk88;             //88
-	};
-	static_assert(sizeof(hkbNodeInfo) == 0x90);
-
 	using NodeList = hkArray<hkbNodeInfo>;
 
 	class bhkBlendCollisionObject : public bhkCollisionObject
@@ -516,19 +411,6 @@ namespace RE
 	};
 	static_assert(sizeof(bhkBlendCollisionObject) == 0x48);
 
-	class bhkRigidBodyT : public bhkRigidBody
-	{
-	public:
-		inline static constexpr auto RTTI = RTTI_bhkRigidBodyT;
-		inline static auto Ni_RTTI = NiRTTI_bhkRigidBodyT;
-
-		~bhkRigidBodyT() override;  // 00
-
-		// members
-		hkQuaternion rotation;  // 40
-		hkVector4 translation;  // 50
-	};
-	static_assert(sizeof(bhkRigidBodyT) == 0x60);
 }
 
 void hkpWorld_removeContactListener(RE::hkpWorld* a_this, RE::hkpContactListener* a_worldListener);
@@ -537,7 +419,7 @@ bool hkpWorld_hasContactListener(RE::hkpWorld* a_this, RE::hkpContactListener* a
 RE::bhkCharProxyController* GetCharProxyController(RE::Actor* a_actor);
 
 RE::hkMemoryRouter& hkGetMemoryRouter();
-inline void* hkHeapAlloc(int numBytes) { return hkGetMemoryRouter().heap->BlockAlloc(numBytes); }
+inline void* hkHeapAlloc(int numBytes) { return hkGetMemoryRouter().Heap->BlockAlloc(numBytes); }
 
 inline float* Track_getData(RE::hkbGeneratorOutput& a_output, RE::hkbGeneratorOutput::TrackHeader& a_header)
 {
