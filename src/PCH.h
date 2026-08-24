@@ -1,5 +1,10 @@
 #pragma once
 
+// CommonLibSSE-NG 6.x uses coroutines in its Papyrus interfaces (IVirtualMachine::Awaitable) and
+// relies on its own precompiled header having pulled <coroutine> in. This project has its own PCH,
+// so it has to be included here before any CommonLibSSE header.
+#include <coroutine>
+
 #pragma warning(push)
 #include <RE/Skyrim.h>
 #include <REL/Relocation.h>
@@ -127,5 +132,19 @@ enum class CollisionLayer
 #define DLLEXPORT __declspec(dllexport)
 
 #define RELOCATION_OFFSET(SE, AE) REL::VariantOffset(SE, AE, 0).offset()
+
+// An AE offset that moved within its function in 1.7.99.
+//
+// The functions themselves were not changed; the executable was rebuilt and the compiler laid the
+// same code out differently, so a call that used to sit at +0x294 now sits at +0x2AC. Only the
+// offset moved, which is why the hook still works once it is pointed at the right place.
+//
+// Chosen at runtime rather than at build time, the way CommonLibSSE handles its own values that
+// changed inside AE (see REL::RelocateMemberIfNewer and RUNTIME_DATA_ACCESSOR_VERSIONED), so one
+// binary stays correct on 1.6.x and on 1.7.99 alike.
+[[nodiscard]] inline std::size_t AEOffsetSince1799(std::size_t a_pre1799, std::size_t a_1799) noexcept
+{
+	return REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99) ? a_1799 : a_pre1799;
+}
 
 #include "Plugin.h"

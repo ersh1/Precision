@@ -26,25 +26,30 @@ RE::hkVector4 GetParentNodePointVelocity(RE::NiAVObject* a_node, const RE::hkVec
 
 void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_event)
 {
-	if (a_event.contactPointProperties->flags & RE::hkContactPointMaterial::FlagEnum::kIsDisabled ||
-		!a_event.contactPointProperties->flags & RE::hkContactPointMaterial::FlagEnum::kIsNew) {
+	// The original read `flags & kIsDisabled || !flags & kIsNew`. C++ binds ! tighter than &,
+	// so the second term is (!flags) & kIsNew, and with kIsNew == 1 that is simply "flags == 0".
+	// It looks like a precedence slip for !(flags & kIsNew), but the mod has shipped and been
+	// tuned with this behaviour for three years - writing the apparently intended version drops
+	// continuing contacts and takes weapon-versus-wall recoil with it. Kept exactly as it was.
+	if (a_event.contactPointProperties->flags.any(RE::hkContactPointMaterial::Flag::kIsDisabled) ||
+		a_event.contactPointProperties->flags.underlying() == 0) {
 		return;
 	}
 
 	// run callbacks and re-check flag
 	PrecisionHandler::GetSingleton()->RunContactListenerCallbacks(a_event);
-	if (a_event.contactPointProperties->flags & RE::hkContactPointMaterial::FlagEnum::kIsDisabled) {
+	if (a_event.contactPointProperties->flags.any(RE::hkContactPointMaterial::Flag::kIsDisabled)) {
 		return;
 	}
 
 	RE::hkpRigidBody* rigidBodyA = a_event.bodies[0];
 	RE::hkpRigidBody* rigidBodyB = a_event.bodies[1];
 
-	CollisionLayer layerA = static_cast<CollisionLayer>(rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo & 0x7f);
-	CollisionLayer layerB = static_cast<CollisionLayer>(rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo & 0x7f);
+	CollisionLayer layerA = static_cast<CollisionLayer>(rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo.filter & 0x7f);
+	CollisionLayer layerB = static_cast<CollisionLayer>(rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo.filter & 0x7f);
 
-	//uint16_t groupA = rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo >> 16;
-	//uint16_t groupB = rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo >> 16;
+	//uint16_t groupA = rigidBodyA->collidable.broadPhaseHandle.collisionFilterInfo.filter >> 16;
+	//uint16_t groupB = rigidBodyB->collidable.broadPhaseHandle.collisionFilterInfo.filter >> 16;
 
 	if (layerA != CollisionLayer::kPrecisionAttack && layerA != CollisionLayer::kPrecisionRecoil && layerB != CollisionLayer::kPrecisionAttack && layerB != CollisionLayer::kPrecisionRecoil) {
 		return;  // Every collision we care about involves the Precision Attack or recoil layer
@@ -60,7 +65,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (!hitRigidBodyWrapper || !hittingRigidBodyWrapper) {
 		if (hittingRigidBody->collidable.broadPhaseHandle.objectQualityType == RE::hkpCollidableQualityType::kKeyframedReporting && !Utils::IsMoveableEntity(hitRigidBody)) {
 			// It's not a hit, so disable contact for keyframed/fixed objects in this case
-			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		}
 		return;
 	}
@@ -77,7 +82,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	// RECOIL
 	if (hittingLayer == CollisionLayer::kPrecisionRecoil) {
 		// Recoil layer is only used for recoil, so disable contact
-		a_event.contactPointProperties->flags |= RE::hkContactPointMaterial::FlagEnum::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 
 		if (auto attackerActor = attacker->As<RE::Actor>()) {
 			auto precisionHandler = PrecisionHandler::GetSingleton();
@@ -106,7 +111,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 									}
 
 									if (pointVelocity.IsEqual(RE::hkVector4())) {  // still zero, skip this collision
-										a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+										a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 										return;
 									}
 
@@ -159,14 +164,14 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	}
 
 	if (!attacker || attacker->formType != RE::FormType::ActorCharacter) {
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
 	if (!target && hitLayer != CollisionLayer::kGround) {
 		if (hittingRigidBody->collidable.broadPhaseHandle.objectQualityType == RE::hkpCollidableQualityType::kKeyframedReporting && !Utils::IsMoveableEntity(hitRigidBody)) {
 			// It's not a hit, so disable contact for keyframed/fixed objects in this case
-			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		}
 		return;
 	}
@@ -182,12 +187,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	RE::Actor* targetActor = target ? target->As<RE::Actor>() : nullptr;
 
 	if (!attackCollision) {
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
 	if (attackCollision->bIsRecoiling) {
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
@@ -201,7 +206,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	}
 
 	if (pointVelocity.IsEqual(RE::hkVector4())) {  // still zero, skip this collision
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
@@ -221,12 +226,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			for (auto& entry : callbackReturns) {
 				if (entry.bIgnoreHit) {
 					// abort hit
-					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+					a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 					return;
 				}
 			}
 		} else {
-			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 			return;  // Disable weapon-weapon collisions
 		}
 	}
@@ -249,12 +254,12 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 				for (auto& entry : callbackReturns) {
 					if (entry.bIgnoreHit) {
 						// abort hit
-						a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+						a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 						return;
 					}
 				}
 			} else {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 				return;  // Disable weapon-moving projectile collisions
 			}
 		}
@@ -277,7 +282,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			if (hittingNode && visualWeaponLength > 0.f) {
 				if (hitDistanceFromWeaponRoot > visualWeaponLength) {
 					// skip collision if the contact point is farther away than visual weapon length
-					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+					a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 					return;
 				}
 			}
@@ -293,7 +298,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		if (!bIsMovableEntity && !bIsDestructible) {
 			// check if already has hit the same material recently
 			if (attackCollision->HasHitMaterial(materialID)) {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 				return;
 			}
 
@@ -314,13 +319,13 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 	// filter out self for whatever reason
 	if (targetActor == attackerActor) {
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
 	if (attackCollision->HasHitRef(target ? target->GetHandle() : RE::ObjectRefHandle())) {
 		// refr has already been recently hit, so disable the contact point and gtfo
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		return;
 	}
 
@@ -329,7 +334,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 			auto charController = targetActor->GetCharController();
 			if (charController) {
 				if (!PrecisionHandler::IsCharacterControllerHittable(charController)) {
-					a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+					a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 					return;
 				}
 			}
@@ -354,7 +359,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsPlayer && bTargetIsTeammate) {
 			if (targetActor->GetActorRuntimeData().currentCombatTarget != attackerActor->GetHandle()) {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 				return;
 			}
 		}
@@ -364,28 +369,28 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 		// don't let the player's teammates or summons hit the player
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsPlayer) {
 			if (attackerCombatTarget != targetActorHandle) {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 				return;
 			}
 		}
 		// don't let the player's teammates hit each other
 		if (Settings::bNoPlayerTeammateAttackCollision && bAttackerIsTeammate && bTargetIsTeammate) {
 			if (attackerCombatTarget != targetActorHandle) {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 				return;
 			}
 		}
 
 		// don't hit actors that aren't hostile and are in combat already
 		if (Settings::bNoNonHostileAttackCollision && precisionHandler->CheckActorInCombat(targetActorHandle) && !targetActor->IsHostileToActor(attackerActor)) {
-			a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+			a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 			return;
 		}
 	}
 
 	if (targetActor && targetActor->IsGhost()) {
 		// skip hitting actors with iframes
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 		if (Settings::bDebug && Settings::bDisplayIframeHits) {
 			const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
 			DrawHandler::AddPoint(niHitPos, 1.f, blue);
@@ -397,7 +402,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 	if (PrecisionHandler::HasJumpIframes(targetActor)) {
 		if (auto hitNode = GetNiObjectFromCollidable(hitRigidBody->GetCollidable())) {
 			if (!Utils::IsNodeOrChildOfNode(hitNode, Settings::jumpIframeNode)) {
-				a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+				a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 
 				if (Settings::bDebug && Settings::bDisplayIframeHits) {
 					const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
@@ -411,7 +416,7 @@ void ContactListener::ContactPointCallback(const RE::hkpContactPointEvent& a_eve
 
 	// disable physical collision with actor
 	if (targetActor || Settings::bDisablePhysicalCollisionOnHit) {
-		a_event.contactPointProperties->flags |= RE::hkpContactPointProperties::kIsDisabled;
+		a_event.contactPointProperties->flags.set(RE::hkContactPointMaterial::Flag::kIsDisabled);
 	}
 
 	// add to already hit refs so we don't hit the target again within the same attack

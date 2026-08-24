@@ -385,7 +385,7 @@ namespace Utils
 			if (RE::NiPointer<RE::NiAVObject> root = RE::NiPointer<RE::NiAVObject>(a_actor->Get3D())) {
 				if (auto rb = GetRigidBody(root.get())) {
 					if (auto hkpRigidBody = static_cast<RE::hkpRigidBody*>(rb->referencedObject.get())) {
-						a_outCollisionFilterInfo = hkpRigidBody->collidable.broadPhaseHandle.collisionFilterInfo;
+						a_outCollisionFilterInfo = hkpRigidBody->collidable.broadPhaseHandle.collisionFilterInfo.filter;
 						return true;
 					}
 				}
@@ -759,7 +759,7 @@ namespace Utils
 			}
 
 			// Skip anything that does not write into zbuffer
-			const auto effect = geom->properties[RE::BSGeometry::States::kEffect];
+			const auto effect = geom->GetGeometryRuntimeData().shaderProperty;
 			if (a_bStrict) {
 				const auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect.get());
 				if (effectShader && effectShader->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
@@ -988,7 +988,7 @@ namespace Utils
 		a_cloningProcess.copyType = *g_unkCloneValue3;
 		a_cloningProcess.appendChar = *g_unkCloneValue4;
 
-		a_cloningProcess.unk68 = a_scale;
+		a_cloningProcess.scale = a_scale;
 	}
 
 	RE::MATERIAL_ID GetHitMaterialID(RE::hkpRigidBody* a_hitRigidBody, const RE::hkpContactPointEvent& a_event, int a_hitBodyIdx)

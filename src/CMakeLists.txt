@@ -89,7 +89,7 @@ add_library(
 target_compile_features(
 	"${PROJECT_NAME}"
 	PRIVATE
-		cxx_std_20
+		cxx_std_23
 )
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -100,7 +100,9 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			"/utf-8"	# Set Source and Executable character sets to UTF-8
 #			"/Zi"	# Debug Information Format
 
-			"/await"
+			# "/await" removed: it is the pre-C++20 experimental coroutine switch. With it MSVC's
+			# <coroutine> disables itself (STL4039) and only provides std::experimental::coroutine_handle,
+			# so CommonLibSSE-NG 6.x fails to compile. C++23 has coroutines without any flag.
 
 			"/permissive-"	# Standards conformance
 			"/Zc:preprocessor"	# Enable preprocessor conformance mode

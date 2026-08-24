@@ -549,7 +549,7 @@ bool AttackTrail::GetTrailDefinition(RE::ActorHandle a_actorHandle, RE::Inventor
 
 RE::BSVisit::BSVisitControl AttackTrail::ApplyColorSettings(RE::BSGeometry* a_geometry, bool a_init, bool a_bExpired)
 {
-	const auto effect = a_geometry->properties[RE::BSGeometry::States::kEffect];
+	const auto effect = a_geometry->GetGeometryRuntimeData().shaderProperty;
 	const auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect.get());
 	if (effectShader) {
 		auto effectShaderMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShader->material);

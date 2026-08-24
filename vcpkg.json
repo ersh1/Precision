@@ -2,11 +2,15 @@
   "name": "precision",
   "version": "2",
   "dependencies": [
+    "directxmath",
+    "directxtk",
     "fmt",
+    "nlohmann-json",
     "rapidcsv",
     "rsm-binary-io",
     "simpleini",
     "spdlog",
+    "toml11",
     "tomlplusplus",
     "xbyak"
   ],
