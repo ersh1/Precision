@@ -936,7 +936,11 @@ bool PrecisionHandler::GetAttackCollisionDefinition(RE::Actor* a_actor, AttackDe
 		attackEvent = "DEFAULT_UNARMED"sv;
 		auto currentProcess = a_actor->GetActorRuntimeData().currentProcess;
 		if (currentProcess && currentProcess->middleHigh) {
-			auto equipment = a_bIsLeftSwing ? currentProcess->middleHigh->leftHand : currentProcess->middleHigh->rightHand;
+			// a_bIsLeftSwing is an optional: test its value, not whether it's set. Testing the optional
+			// itself picked the left hand for every weaponSwing without attack data (e.g. an attack chained
+			// out of a bash), which made sword-and-board/one-handed attacks fall back to DEFAULT_UNARMED.
+			const bool bIsLeftSwing = a_bIsLeftSwing.value_or(false);
+			auto equipment = bIsLeftSwing ? currentProcess->middleHigh->leftHand : currentProcess->middleHigh->rightHand;
 			if (equipment && equipment->object) {
 				if (auto weapon = equipment->object->As<RE::TESObjectWEAP>()) {
 					if (weapon && weapon->weaponData.animationType != RE::WEAPON_TYPE::kHandToHandMelee) {

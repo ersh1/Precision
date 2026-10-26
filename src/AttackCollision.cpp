@@ -5,7 +5,7 @@
 #include "Settings.h"
 
 AttackCollision::AttackCollision(RE::ActorHandle a_actorHandle, const CollisionDefinition& a_collisionDefinition) :
-	actorHandle(a_actorHandle), nodeName(a_collisionDefinition.nodeName)
+	actorHandle(a_actorHandle), nodeName(a_collisionDefinition.nodeName), requestedNodeName(a_collisionDefinition.nodeName)
 {
 	lastUpdate = *g_durationOfApplicationRunTimeMS;
 
@@ -751,6 +751,10 @@ std::shared_ptr<AttackCollision> AttackCollisions::GetAttackCollision(std::strin
 	ReadLocker locker(lock);
 
 	auto it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_nodeName](auto& attackCollision) { return attackCollision->nodeName == a_nodeName; });
+	if (it == _attackCollisions.end()) {
+		// a bash collision requested on WEAPON may have been moved to SHIELD
+		it = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_nodeName](auto& attackCollision) { return attackCollision->requestedNodeName == a_nodeName; });
+	}
 	if (it != _attackCollisions.end()) {
 		return *it;
 	}
@@ -806,6 +810,10 @@ bool AttackCollisions::RemoveAttackCollision(const CollisionDefinition& a_collis
 			OnCollisionRemoved();
 		} else {  // remove the first matching the node name
 			auto search = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return !attackCollision || attackCollision->nodeName == a_collisionDefinition.nodeName; });
+			if (search == _attackCollisions.end()) {
+				// a bash collision requested on WEAPON may have been moved to SHIELD, match it by the requested node too
+				search = std::find_if(_attackCollisions.begin(), _attackCollisions.end(), [a_collisionDefinition](auto& attackCollision) { return attackCollision->requestedNodeName == a_collisionDefinition.nodeName; });
+			}
 			if (search != _attackCollisions.end()) {
 				_attackCollisions.erase(search);
 				OnCollisionRemoved();

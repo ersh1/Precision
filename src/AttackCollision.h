@@ -9,7 +9,8 @@ struct AttackCollision
 
 	~AttackCollision();
 
-	std::string nodeName;
+	std::string nodeName;           // node the collision is actually attached to (a bash may move it to SHIELD)
+	std::string requestedNodeName;  // node the collision definition asked for, used to match Collision_Remove
 	std::optional<uint8_t> ID;
 	bool bNoRecoil = false;
 	float damageMult = 1.f;
