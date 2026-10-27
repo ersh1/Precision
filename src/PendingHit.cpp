@@ -7,6 +7,11 @@
 
 void PendingHit::Run()
 {
+	if (!attacker || !attacker->GetActorRuntimeData().currentProcess) {
+		// the attacker was disabled or unloaded after the hit was queued
+		return;
+	}
+
 	if (bOnlyFX) {
 		RunFXOnly();
 		return;
